@@ -22,6 +22,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const jd = String(body.jd || "").trim();
     const resume = String(body.resume || "").trim();
+    const currentCvHtml = String(body.currentCvHtml || "").trim();
+    const revisionNotes = String(body.revisionNotes || "").trim();
 
     if (!jd || !resume) {
       return NextResponse.json(
@@ -30,17 +32,31 @@ export async function POST(req: Request) {
       );
     }
 
+    const isRevision = Boolean(revisionNotes && currentCvHtml);
+
     try {
       const content = await callDeepSeek(
         [
           {
             role: "system",
-            content: `You are an expert CV rewriter for the Hong Kong job market (international / MNC / local firms).
-Rewrite the candidate's full experience library to fit ONE target JD.
+            content: `You are an expert CV rewriter for the Hong Kong job market (MNC / local professional firms).
+
+=== STEP A — JD ANALYSIS (do this first, mentally; do not output it) ===
+From the Target JD, extract:
+1) Hard skills / tools / domain keywords (e.g. GIS, ESG, Python, stakeholder engagement)
+2) Soft skills / competencies (communication, cross-cultural, analytical rigor)
+3) Role pain points / must-haves (what the hiring manager needs solved)
+4) Preferred seniority / education signals
+
+=== STEP B — GROUNDED REWRITE ===
+Rewrite ONLY using facts from the candidate's Full Experience Library.
+- Map library bullets to JD keywords / pain points (rephrase & prioritise; never invent employers, degrees, dates, or metrics).
+- Elevate matching experience; demote or trim low-relevance content.
+- Prefer quantified, achievement-oriented HK Business English.
 
 LANGUAGE RULE (MANDATORY):
-- tailoredResumeHtml MUST be high-quality Business English suitable for Hong Kong applications. No Chinese characters inside the CV HTML.
-- rationale may use Simplified Chinese for the candidate's internal notes ONLY.
+- tailoredResumeHtml: high-quality Business English for Hong Kong applications. NO Chinese inside the CV HTML.
+- rationale: Simplified Chinese only (internal notes).
 
 Output STRICT JSON only (no markdown fences):
 {
@@ -51,25 +67,33 @@ Output STRICT JSON only (no markdown fences):
   }
 }
 
-=== bilingual output rules (MUST follow) ===
-1) tailoredResumeHtml: STRICTLY English only. Follow the classic PDF HTML layout classes.
-   ${CV_HTML_SCHEMA_HINT}
-   Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS.
-   Internship headers MUST be "Company, City" with role on the next line (cv-role).
-   Never invent employers/degrees/dates. No Chinese characters inside tailoredResumeHtml.
-   Use polished HK Business English tone (clear, concise, achievement-oriented).
+=== HTML layout ===
+${CV_HTML_SCHEMA_HINT}
+Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS.
+Internship headers MUST be "Company, City" with role on the next line (cv-role).
 
-2) rationale: STRICTLY Simplified Chinese only — ONLY two arrays (no other fields):
-   - added【增加】: 1–3 items. Each {text, reason}. text = 新增的专业词/量化指标/强动词；reason = 为何增加（极短）。
-   - removed【减少】: 1–2 items. Each {text, reason}. text = 删减的无关经历或冗余；reason = 为何删减（极短）。
-   Do NOT include a separate "why" field. Keep ultra-concise. No English / Traditional Chinese.`,
+=== rationale (Simplified Chinese only) ===
+- added【增加】: 1–3 items {text, reason} — new JD keywords / metrics / stronger verbs you emphasised.
+- removed【减少】: 1–2 items {text, reason} — what you cut as low relevance.
+Keep ultra-concise. No English / Traditional Chinese in rationale.
+
+${
+  isRevision
+    ? `=== REVISION MODE ===
+You are refining an EXISTING tailored CV. Respect the current HTML structure/classes.
+Apply the user's revision notes precisely while staying grounded in the experience library and JD.
+Do not discard strong JD alignment already present unless the notes require it.`
+    : ""
+}`,
           },
           {
             role: "user",
-            content: `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library】\n${resume.slice(0, 9000)}`,
+            content: isRevision
+              ? `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library】\n${resume.slice(0, 7000)}\n\n【Current Tailored CV HTML】\n${currentCvHtml.slice(0, 12000)}\n\n【User Revision Notes】\n${revisionNotes.slice(0, 2000)}`
+              : `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library】\n${resume.slice(0, 9000)}`,
           },
         ],
-        { json: true, temperature: 0.35 }
+        { json: true, temperature: isRevision ? 0.3 : 0.35 }
       );
 
       const parsed = extractJson<{
@@ -113,7 +137,7 @@ Output STRICT JSON only (no markdown fences):
           ],
         };
         return NextResponse.json({
-          tailoredResumeHtml: buildFallbackCvHtml(),
+          tailoredResumeHtml: currentCvHtml || buildFallbackCvHtml(),
           rationale: demoRationale,
           rationaleList: flattenRationale(demoRationale),
           demo: true,

@@ -130,14 +130,14 @@ export function ApplicationsTracker() {
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <PageHeader
           emoji="📊"
-          title="求职总结"
+          title="求职进度"
           description="表格视图 · 按岗位对齐材料与进度 · 暂无记录"
           accent="indigo"
         />
         <div className="rounded-3xl border border-dashed border-slate-300/70 bg-white/60 px-8 py-16 text-center shadow-glass backdrop-blur-xl">
           <LayoutGrid className="mx-auto h-10 w-10 text-slate-400" />
           <h3 className="mt-4 font-display text-xl text-slate-900">
-            求职总结还是空的
+            求职进度还是空的
           </h3>
           <p className="mx-auto mt-2 max-w-md text-sm tracking-wide text-slate-600">
             在「专属简历」生成材料后，可一键追加到此处归档。
@@ -159,7 +159,7 @@ export function ApplicationsTracker() {
     <section className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6">
       <PageHeader
         emoji="📊"
-        title="求职总结"
+        title="求职进度"
         description={`表格视图 · 按岗位对齐材料与进度 · 共 ${applications.length} 个`}
         accent="indigo"
         actions={

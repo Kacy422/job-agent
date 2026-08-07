@@ -93,6 +93,8 @@ interface AppState {
   syncStatus: SyncStatus;
   syncError: string;
   hydrated: boolean;
+  /** 立即把当前工作区写入 Redis（供 Save 按钮） */
+  saveWorkspaceNow: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -346,6 +348,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [hydrated, buildSnapshot]);
 
+  const saveWorkspaceNow = useCallback(async () => {
+    const snapshot = buildSnapshot();
+    writeLocalWorkspaceCache(snapshot);
+    setSyncStatus("saving");
+    try {
+      const res = await fetch("/api/workspace", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(snapshot),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        setSyncStatus("synced");
+        setSyncError("");
+        return { ok: true as const };
+      }
+      if (res.status === 503) {
+        setSyncStatus("offline");
+        const error = String(json.error || "Redis 未配置");
+        setSyncError(error);
+        return { ok: false as const, error };
+      }
+      const error = String(json.error || "保存到 Redis 失败");
+      setSyncStatus("error");
+      setSyncError(error);
+      return { ok: false as const, error };
+    } catch {
+      const error = "保存到云端失败（本机缓存已更新）";
+      setSyncStatus("error");
+      setSyncError(error);
+      return { ok: false as const, error };
+    }
+  }, [buildSnapshot]);
+
   const updateProfileField = useCallback(
     (key: import("@/types").ProfileScalarKey, value: string) => {
       setProfile((prev) => ({ ...prev, [key]: value }));
@@ -564,6 +600,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncError,
       hydrated,
+      saveWorkspaceNow,
     }),
     [
       tab,
@@ -603,6 +640,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncError,
       hydrated,
+      saveWorkspaceNow,
     ]
   );
 

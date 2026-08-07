@@ -17,6 +17,7 @@ import {
   FileText,
   Copy,
   Check,
+  RefreshCw,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { EditableCvPreview } from "@/components/EditableCvPreview";
@@ -37,7 +38,7 @@ import {
 } from "@/types";
 
 const SHORT_JD_HINT =
-  "URL parsed — company/title prefilled. For finer matching, paste the full Job Description into the JD box (this clears the URL to save tokens).";
+  "已根据链接预填公司/岗位。若 JD 文本过短，请将网页上的完整 Job Description 粘贴到下方框内以获得更精准匹配。";
 
 function looksLikeUrl(text: string) {
   const t = text.trim();
@@ -86,8 +87,12 @@ export function ResumeGenerator() {
   const [parseHint, setParseHint] = useState("");
   const [cachedParsedJd, setCachedParsedJd] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [revisionNotes, setRevisionNotes] = useState("");
+  const [loadingRefine, setLoadingRefine] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const clearingRef = useRef(false);
+  const urlParseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoFillJdRef = useRef(false);
 
   const hasCv = Boolean(resumeHtml || tailoredResume?.includes("cv-sheet"));
   const hasArtifacts = Boolean(
@@ -151,12 +156,6 @@ export function ResumeGenerator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tailoredResume]);
 
-  const activeSource: "url" | "jd" | null = draftJobUrl.trim()
-    ? "url"
-    : draftJd.trim()
-      ? "jd"
-      : null;
-
   const jdOrUrl = draftJd.trim() || draftJobUrl.trim() || cachedParsedJd.trim();
   const canRewrite = Boolean(fullExperience.trim() && jdOrUrl);
   const canParseUrl = Boolean(draftJobUrl.trim());
@@ -173,20 +172,77 @@ export function ResumeGenerator() {
     if (isValidJobTitle(title)) setDraftTitle(title.trim());
   }
 
-  /** URL 输入优先：清空 JD；JD 输入优先：清空 URL */
+  /** 粘贴/输入 Job URL 后自动抓取 JD 并填入下方文本框（保留 URL） */
   function onUrlChange(value: string) {
     setDraftJobUrl(value);
-    if (value.trim()) {
-      setDraftJd("");
-      setCachedParsedJd("");
+    const trimmed = value.trim();
+    if (!trimmed) {
+      if (urlParseTimerRef.current) clearTimeout(urlParseTimerRef.current);
+      return;
     }
+    if (!looksLikeUrl(trimmed)) return;
+
+    if (urlParseTimerRef.current) clearTimeout(urlParseTimerRef.current);
+    urlParseTimerRef.current = setTimeout(() => {
+      void autoExtractJdFromUrl(trimmed);
+    }, 500);
   }
 
+  /** 手动编辑 JD 时不再清空 URL（URL 仍作网申链接） */
   function onJdChange(value: string) {
+    if (autoFillJdRef.current) {
+      autoFillJdRef.current = false;
+    }
     setDraftJd(value);
-    if (value.trim()) {
-      setDraftJobUrl("");
-      setCachedParsedJd("");
+  }
+
+  async function autoExtractJdFromUrl(rawUrl: string) {
+    const url = normalizeUrl(rawUrl);
+    if (!url || !looksLikeUrl(url)) return;
+    beginNewJobParse();
+    setLoadingParse(true);
+    setError("");
+    setParseHint("正在从链接提取 JD…");
+    try {
+      const res = await fetch("/api/parse-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "岗位解析失败");
+
+      const job = data.job || data;
+      const softFallback = Boolean(data.softFallback || data.shortJd);
+      const hint = String(data.hint || "").trim();
+      const jd = String(
+        job.description || data.description || data.jd || data.rawText || ""
+      ).trim();
+      const company = String(job.company || data.company || "").trim();
+      const title = String(
+        job.title || data.title || data.jobTitle || ""
+      ).trim();
+
+      applyParsedMeta(company, title);
+      setCachedParsedJd(jd);
+
+      if (jd && meaningfulTextLen(jd) >= 40) {
+        autoFillJdRef.current = true;
+        setDraftJd(jd);
+        setParseHint(
+          softFallback
+            ? hint || SHORT_JD_HINT
+            : `已自动提取 JD（${company || "公司未识别"} · ${title || "岗位未识别"}），可继续编辑后生成 CV`
+        );
+      } else {
+        setParseHint(hint || SHORT_JD_HINT);
+      }
+      setTimeout(() => setParseHint(""), 8000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "链接解析失败");
+      setParseHint("");
+    } finally {
+      setLoadingParse(false);
     }
   }
 
@@ -276,34 +332,15 @@ export function ResumeGenerator() {
 
   async function handleParseUrl() {
     if (!canParseUrl) {
-      setError("请先在 URL 框粘贴岗位链接（与 JD 二选一）");
+      setError("请先在 URL 框粘贴岗位链接");
       return;
     }
-    beginNewJobParse();
-    setLoadingParse(true);
-    try {
-      const resolved = await parseJobInput({
-        allowEmptyJd: true,
-        source: "url",
-      });
-      if (resolved.softFallback) {
-        setParseHint(resolved.hint || SHORT_JD_HINT);
-      } else {
-        setParseHint(
-          `已解析：${resolved.company || "公司未识别"} · ${resolved.title || "岗位未识别"}`
-        );
-      }
-      setTimeout(() => setParseHint(""), 7000);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "岗位解析失败");
-    } finally {
-      setLoadingParse(false);
-    }
+    await autoExtractJdFromUrl(draftJobUrl.trim());
   }
 
   async function handleRecognizeMeta() {
     if (!canRecognizeMeta) {
-      setError("请先在 JD 框粘贴岗位文本（与 URL 二选一）");
+      setError("请先在 JD 框粘贴岗位文本，再点击识别");
       return;
     }
     beginNewJobParse();
@@ -334,6 +371,18 @@ export function ResumeGenerator() {
     title?: string;
     applyUrl?: string;
   }> {
+    // Prefer filled JD text; fall back to cached scrape / URL parse
+    if (meaningfulTextLen(draftJd) >= 50) {
+      return {
+        jd: draftJd.trim(),
+        company: draftCompany,
+        title: draftTitle,
+        applyUrl: draftJobUrl.trim()
+          ? normalizeUrl(draftJobUrl.trim())
+          : undefined,
+      };
+    }
+
     if (draftJobUrl.trim()) {
       if (meaningfulTextLen(cachedParsedJd) >= 50) {
         return {
@@ -350,6 +399,11 @@ export function ResumeGenerator() {
       if (!resolved.jd?.trim() || meaningfulTextLen(resolved.jd) < 50) {
         throw new Error(resolved.hint || SHORT_JD_HINT);
       }
+      if (resolved.jd) {
+        autoFillJdRef.current = true;
+        setDraftJd(resolved.jd);
+        setCachedParsedJd(resolved.jd);
+      }
       return resolved;
     }
 
@@ -358,11 +412,27 @@ export function ResumeGenerator() {
         jd: draftJd.trim(),
         company: draftCompany,
         title: draftTitle,
-        applyUrl: undefined,
+        applyUrl: draftJobUrl.trim()
+          ? normalizeUrl(draftJobUrl.trim())
+          : undefined,
       };
     }
 
-    throw new Error("请输入岗位网址或粘贴 JD（二选一）");
+    throw new Error("请粘贴岗位网址（自动提取 JD）或手动粘贴 JD");
+  }
+
+  async function applyCvResult(data: {
+    tailoredResumeHtml?: string;
+    rationale?: unknown;
+    rationaleList?: unknown;
+  }) {
+    const html = String(data.tailoredResumeHtml || "");
+    setResumeHtml(html);
+    setTailoredResume(html);
+    setRationale(normalizeCvRationale(data.rationale ?? data.rationaleList));
+    bindGenerationSource();
+    setShowRationale(true);
+    setCvEpoch((n) => n + 1);
   }
 
   async function rewriteCv() {
@@ -371,7 +441,7 @@ export function ResumeGenerator() {
       return;
     }
     if (!jdOrUrl) {
-      setError("请输入岗位网址或粘贴 JD 描述（二选一）");
+      setError("请粘贴岗位网址或 JD 描述");
       return;
     }
     setLoadingCv(true);
@@ -385,19 +455,54 @@ export function ResumeGenerator() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
-      const html = String(data.tailoredResumeHtml || "");
-      setResumeHtml(html);
-      setTailoredResume(html);
-      setRationale(
-        normalizeCvRationale(data.rationale ?? data.rationaleList)
-      );
-      bindGenerationSource();
-      setShowRationale(true);
-      setCvEpoch((n) => n + 1);
+      await applyCvResult(data);
+      setRevisionNotes("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "生成失败");
     } finally {
       setLoadingCv(false);
+    }
+  }
+
+  async function refineCv() {
+    if (!hasCv) {
+      setError("请先生成初稿 CV");
+      return;
+    }
+    if (!revisionNotes.trim()) {
+      setError("请填写手动修改需求，例如：强调 GIS 数据分析经验");
+      return;
+    }
+    if (!fullExperience.trim()) {
+      setError("请先在「人物画像」填写结构化经历");
+      return;
+    }
+    setLoadingRefine(true);
+    setError("");
+    try {
+      const resolved = await resolveJd();
+      const current =
+        exportRef.current?.innerHTML?.trim() ||
+        resumeHtml ||
+        tailoredResume ||
+        "";
+      const res = await fetch("/api/generate-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jd: resolved.jd,
+          resume: fullExperience,
+          currentCvHtml: current,
+          revisionNotes: revisionNotes.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "重新优化失败");
+      await applyCvResult(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "重新优化失败");
+    } finally {
+      setLoadingRefine(false);
     }
   }
 
@@ -485,7 +590,7 @@ export function ResumeGenerator() {
       updatedAt: now,
     };
     appendApplication(app);
-    setSavedHint(`已追加到求职总结：${app.company} · ${app.title}`);
+    setSavedHint(`已追加到求职进度：${app.company} · ${app.title}`);
     setTimeout(() => setSavedHint(""), 2500);
   }
 
@@ -554,7 +659,7 @@ export function ResumeGenerator() {
         emoji="📝"
         step="步骤 2 · 专属简历"
         title="一键改写 CV · 按需生成其他材料"
-        description="URL 与 JD 二选一（最新输入优先），避免重复消耗 Token。右侧 A4 预览可一键导出。"
+        description="粘贴岗位链接将自动提取 JD 并填入下方；再根据 JD 深度定制 CV，支持二次手动优化。"
         accent="teal"
         actions={
           <>
@@ -572,7 +677,7 @@ export function ResumeGenerator() {
               className="soft-btn rounded-2xl border border-teal-200/60 bg-teal-50/80 px-4 py-2.5 text-teal-900 shadow-glass backdrop-blur-md hover:bg-teal-50"
             >
               <Save className="h-4 w-4" />
-              追加到求职总结
+              追加到求职进度
             </button>
           </>
         }
@@ -628,11 +733,9 @@ export function ResumeGenerator() {
               <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                 <Link2 className="h-3.5 w-3.5" />
                 工作网址 / JD 链接
-                {activeSource === "url" && (
-                  <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] text-teal-700">
-                    当前数据源
-                  </span>
-                )}
+                <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] text-teal-700">
+                  粘贴即自动提取
+                </span>
               </label>
             </div>
             <div className="mb-2 flex gap-2">
@@ -646,7 +749,7 @@ export function ResumeGenerator() {
                     onUrlChange(text.trim());
                   }
                 }}
-                placeholder="🔗 粘贴 URL（将自动清空下方 JD）"
+                placeholder="🔗 粘贴岗位 URL，自动提取 JD 到下方…"
                 className="min-w-0 flex-1 soft-input"
               />
               <button
@@ -655,7 +758,7 @@ export function ResumeGenerator() {
                 disabled={loadingParse || !canParseUrl}
                 className="soft-btn shrink-0 rounded-2xl border border-teal-200/60 bg-teal-50/80 px-3 py-2 text-teal-900 shadow-glass disabled:opacity-50"
               >
-                {loadingParse && activeSource === "url" ? (
+                {loadingParse ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Link2 className="h-4 w-4" />
@@ -666,9 +769,9 @@ export function ResumeGenerator() {
             <div className="mb-1 flex items-center justify-between gap-2">
               <label className="text-xs font-medium text-slate-600">
                 JD 描述
-                {activeSource === "jd" && (
+                {draftJd.trim() && (
                   <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700">
-                    当前数据源
+                    可编辑
                   </span>
                 )}
               </label>
@@ -679,7 +782,7 @@ export function ResumeGenerator() {
                 className="soft-btn rounded-xl border border-indigo-200/60 bg-indigo-50/80 px-2 py-1 text-[11px] font-medium text-indigo-800 shadow-glass disabled:opacity-50"
                 title="仅点击时调用 API，节省 Token"
               >
-                {loadingParse && activeSource === "jd" ? (
+                {loadingParse ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 ) : (
                   <Search className="h-3 w-3" />
@@ -690,7 +793,7 @@ export function ResumeGenerator() {
             <textarea
               value={draftJd}
               onChange={(e) => onJdChange(e.target.value)}
-              placeholder="粘贴完整 JD（将自动清空上方 URL）…"
+              placeholder="粘贴完整 JD，或粘贴上方 URL 后自动填充…"
               className="soft-textarea mb-3 h-44 w-full p-3"
               style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
             />
@@ -721,9 +824,8 @@ export function ResumeGenerator() {
               根据 JD 改写 CV
             </button>
             <p className="mt-2 text-[11px] text-slate-400">
-              URL / JD 互斥 · 解析开始即清空旧 CV/CL/面试题 · 画像{" "}
-              {fullExperience.length} 字
-              {cachedParsedJd ? " · 已缓存 URL 解析 JD" : ""}
+              粘贴 URL 自动提取 JD · 画像 {fullExperience.length} 字
+              {cachedParsedJd ? " · 已缓存链接 JD" : ""}
             </p>
           </div>
 
@@ -862,51 +964,83 @@ export function ResumeGenerator() {
           )}
 
           {hasCv ? (
-            <EditableCvPreview
-              key={`cv-${cvEpoch}`}
-              initialHtml={resumeHtml || tailoredResume}
-              onHtmlChange={(html) => {
-                setResumeHtml(html);
-                setTailoredResume(html);
-              }}
-              exportRef={exportRef}
-              toolbar={
-                <>
-                  <button
-                    type="button"
-                    onClick={exportCvPdf}
-                    className="soft-btn rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-900"
-                  >
-                    <Download className="h-3 w-3" />
-                    Download PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={exportCvWord}
-                    className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                  >
-                    <FileText className="h-3 w-3" />
-                    Download Word
-                  </button>
-                  <button
-                    type="button"
-                    onClick={copyCvText}
-                    className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                  >
-                    {copiedKey === "cv" ? (
-                      <Check className="h-3 w-3 text-emerald-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                    Copy
-                  </button>
-                </>
-              }
-            />
+            <>
+              <EditableCvPreview
+                key={`cv-${cvEpoch}`}
+                initialHtml={resumeHtml || tailoredResume}
+                onHtmlChange={(html) => {
+                  setResumeHtml(html);
+                  setTailoredResume(html);
+                }}
+                exportRef={exportRef}
+                toolbar={
+                  <>
+                    <button
+                      type="button"
+                      onClick={exportCvPdf}
+                      className="soft-btn rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-900"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportCvWord}
+                      className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                    >
+                      <FileText className="h-3 w-3" />
+                      Download Word
+                    </button>
+                    <button
+                      type="button"
+                      onClick={copyCvText}
+                      className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                    >
+                      {copiedKey === "cv" ? (
+                        <Check className="h-3 w-3 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      Copy
+                    </button>
+                  </>
+                }
+              />
+
+              <div className="glass-panel p-5">
+                <h4 className="mb-1 text-sm font-semibold text-slate-900">
+                  手动添加修改需求
+                </h4>
+                <p className="mb-3 text-xs text-slate-500">
+                  基于初稿二次优化：说明你想强调或调整的方向，再点「重新优化
+                  CV」。
+                </p>
+                <textarea
+                  value={revisionNotes}
+                  onChange={(e) => setRevisionNotes(e.target.value)}
+                  rows={3}
+                  placeholder='例如：强调我的 GIS 数据分析经验；语言更偏向商务风格；弱化与岗位无关的社团经历…'
+                  className="soft-textarea mb-3 w-full p-3"
+                />
+                <button
+                  type="button"
+                  onClick={refineCv}
+                  disabled={loadingRefine || !revisionNotes.trim()}
+                  className="soft-btn-accent w-full py-3 font-semibold disabled:opacity-50"
+                >
+                  {loadingRefine ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  重新优化 CV
+                </button>
+              </div>
+            </>
           ) : (
             <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-dashed border-slate-300/70 bg-white/50 px-6 text-center text-sm text-slate-400 shadow-glass backdrop-blur-md">
-              输入岗位网址或 JD，点击「根据 JD 改写 CV」后，此处显示拉满 A4
-              的英文简历
+              粘贴岗位网址（自动提取 JD）或手动粘贴 JD，点击「根据 JD 改写
+              CV」后，此处显示拉满 A4 的英文简历
             </div>
           )}
         </div>

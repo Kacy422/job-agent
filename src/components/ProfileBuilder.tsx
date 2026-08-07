@@ -10,7 +10,11 @@ import {
   Contact,
   Plus,
   Trash2,
+  Save,
+  Loader2,
+  Check,
 } from "lucide-react";
+import { useState } from "react";
 import { useApp } from "@/context/AppContext";
 import { PageHeader } from "@/components/PageHeader";
 import { newProfileEntry, type ProfileEntry } from "@/types";
@@ -108,8 +112,43 @@ function EntryEditor({
 }
 
 export function ProfileBuilder() {
-  const { profile, setProfile, updateProfileField, fullExperience, setTab } =
-    useApp();
+  const {
+    profile,
+    setProfile,
+    updateProfileField,
+    fullExperience,
+    setTab,
+    saveWorkspaceNow,
+  } = useApp();
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{
+    type: "ok" | "err";
+    message: string;
+  } | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setToast(null);
+    try {
+      const result = await saveWorkspaceNow();
+      if (result.ok) {
+        setToast({
+          type: "ok",
+          message: "个人信息已保存到云端 Redis",
+        });
+      } else {
+        setToast({
+          type: "err",
+          message: result.error || "保存失败，请检查 Redis 配置",
+        });
+      }
+    } catch {
+      setToast({ type: "err", message: "保存失败，请稍后重试" });
+    } finally {
+      setSaving(false);
+      setTimeout(() => setToast(null), 3200);
+    }
+  }
 
   function updateEntries(key: EntryKey, entries: ProfileEntry[]) {
     setProfile((prev) => ({ ...prev, [key]: entries }));
@@ -142,16 +181,47 @@ export function ProfileBuilder() {
         description="已从 Master CV（cvenvironment.pdf）自动解析并分类填入；可编辑、新增条目，数据保存在本地。"
         accent="violet"
         actions={
-          <button
-            type="button"
-            onClick={() => setTab("resume")}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            去生成专属简历
-            <ArrowRight className="h-4 w-4" />
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="soft-btn-accent px-4 py-2.5"
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save 保存
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("resume")}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              去生成专属简历
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </div>
         }
       />
+
+      {toast && (
+        <div
+          className={`mb-4 flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm shadow-glass ${
+            toast.type === "ok"
+              ? "border-emerald-200/70 bg-emerald-50/90 text-emerald-900"
+              : "border-rose-200/70 bg-rose-50/90 text-rose-800"
+          }`}
+          role="status"
+        >
+          {toast.type === "ok" ? (
+            <Check className="h-4 w-4 shrink-0" />
+          ) : null}
+          {toast.message}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <article className="glass-panel p-4 md:col-span-2">
@@ -424,9 +494,25 @@ export function ProfileBuilder() {
         </article>
       </div>
 
-      <p className="mt-4 text-center text-xs text-slate-400">
-        已组合全量经历 {fullExperience.length} 字符 · 本地已保存
-      </p>
+      <div className="mt-6 flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="soft-btn-primary px-8 py-3 font-semibold"
+        >
+          {saving ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          Save · 保存到云端
+        </button>
+        <p className="text-center text-xs text-slate-400">
+          已组合全量经历 {fullExperience.length} 字符 · 点击 Save
+          立即同步 Upstash Redis
+        </p>
+      </div>
     </section>
   );
 }

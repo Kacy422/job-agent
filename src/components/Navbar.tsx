@@ -1,16 +1,16 @@
 "use client";
 
 import {
-  ClipboardList,
   UserRound,
   FileText,
   Bot,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { useApp, type TabId } from "@/context/AppContext";
 
-const TABS: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
-  { id: "board", label: "求职总结", icon: ClipboardList },
+const TABS: { id: TabId; label: string; icon: typeof TrendingUp }[] = [
+  { id: "board", label: "求职进度", icon: TrendingUp },
   { id: "profile", label: "人物画像", icon: UserRound },
   { id: "resume", label: "专属简历", icon: FileText },
   { id: "apply", label: "自动网申", icon: Bot },
@@ -56,7 +56,7 @@ export function Navbar() {
               JobAgent
             </p>
             <p className="text-xs tracking-wide text-slate-500">
-              人物画像 · 专属简历 · 求职总结
+              人物画像 · 专属简历 · 求职进度
               {applications.length > 0
                 ? ` · ${applications.length} 个岗位`
                 : ""}

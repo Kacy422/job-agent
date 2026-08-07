@@ -1,4 +1,4 @@
-/** 求职总结 · 网申状态 */
+/** 求职进度 · 网申状态 */
 export type TrackStatus =
   | "preparing"
   | "applying"
