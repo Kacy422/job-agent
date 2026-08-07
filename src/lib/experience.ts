@@ -67,9 +67,7 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
       .map((s) => s.trim())
       .filter(Boolean);
     parts.push(
-      `## Certificate (REQUIRED under SKILLS — bold label AND each name)\nHTML form: <strong>Certificate:</strong> ${names
-        .map((n) => `<strong>${n}</strong>`)
-        .join("; ")}\nPlain: Certificate: ${names.join("; ")}`
+      `## Certificate (REQUIRED under SKILLS — bold label ONLY, normal-weight names)\nHTML: <strong>Certificate:</strong> ${names.join("; ")}\nPlain: Certificate: ${names.join("; ")}`
     );
   } else {
     parts.push(

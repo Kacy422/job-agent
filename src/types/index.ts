@@ -259,7 +259,7 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
       id: eid("prj"),
       headline: "Sustainable Architectural Design in Hong Kong",
       detail: "Independent Developer",
-      period: "",
+      period: "Sept 2025 - Dec 2025",
       bullets: [
         "Developed a climate-responsive building design and conducted a preliminary BEAM Plus NB v2.0 assessment, achieving a Gold rating outcome.",
       ],
@@ -270,8 +270,7 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
       detail: "President",
       period: "Sept 2022 - Jun 2023",
       bullets: [
-        "Oversaw overall operations, coordinated work across departments (planning, publicity, finance).",
-        "Managed content planning, designing, and publishing on social media like xiaohongshu.",
+        "Led society operations across planning, publicity and finance, and drove content design and publishing on Xiaohongshu to grow engagement.",
       ],
     },
   ],
