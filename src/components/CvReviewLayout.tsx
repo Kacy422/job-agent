@@ -207,9 +207,9 @@ export function CvReviewLayout({
 
   return (
     <div ref={rootRef} className="relative">
-      <div className="grid gap-3 xl:grid-cols-[3fr_1fr]">
-        <div className="min-w-0">{cv}</div>
-        <aside className="min-w-0">{comments}</aside>
+      <div className="grid max-h-[calc(100vh-7.5rem)] gap-3 xl:grid-cols-[3fr_1fr]">
+        <div className="min-h-0 min-w-0 overflow-y-auto">{cv}</div>
+        <aside className="min-h-0 min-w-0 overflow-y-auto">{comments}</aside>
       </div>
       <svg
         className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible"

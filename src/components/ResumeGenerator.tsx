@@ -1052,7 +1052,7 @@ export function ResumeGenerator() {
           )}
         </div>
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-h-0 min-w-0 space-y-4">
           {hasCv ? (
             <CvReviewLayout
               highlights={cvHighlights}
@@ -1102,8 +1102,8 @@ export function ResumeGenerator() {
                 />
               }
               comments={
-                <aside className="flex min-h-0 flex-col gap-2.5">
-                  <div className="px-0.5">
+                <aside className="flex max-h-[calc(100vh-7.5rem)] min-h-0 flex-col gap-2.5 overflow-y-auto pr-0.5">
+                  <div className="shrink-0 px-0.5">
                     <div className="flex items-center gap-1.5">
                       <MessageSquareText className="h-3.5 w-3.5 text-slate-500" />
                       <p className="text-[11px] font-semibold tracking-wide text-slate-700">
@@ -1115,7 +1115,7 @@ export function ResumeGenerator() {
                     </p>
                   </div>
 
-                  <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-0.5">
+                  <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
                     {cvHighlights.map((h) => (
                       <WordCommentCard key={h.id} highlight={h} />
                     ))}
@@ -1126,7 +1126,7 @@ export function ResumeGenerator() {
                     )}
                   </div>
 
-                  <div className="glass-panel p-4">
+                  <div className="glass-panel shrink-0 p-4">
                     <h4 className="mb-1 text-sm font-semibold text-slate-900">
                       手动添加修改需求
                     </h4>

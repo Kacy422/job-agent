@@ -277,7 +277,7 @@ export function buildEmptyCvHtml(): string {
       <h2 class="cv-section-title">SKILLS</h2>
       <p class="cv-skills-line"><strong>Software:</strong> Microsoft Office, Arcgis, Google Earth Engine, Photoshop, Adobe Illustrator, InDesign, Adobe Premiere Pro, ENVI-met, 3D Modeling Software</p>
       <p class="cv-skills-line"><strong>Language:</strong> IELTS 7.0; CANTONESE (advanced); MANDARIN (native speaker)</p>
-      <p class="cv-skills-line"><strong>BEAM Affiliate</strong>; <strong>CFA - ESG</strong></p>
+      <p class="cv-skills-line"><strong>Certificate:</strong> BEAM Affiliate; CFA - ESG</p>
     </section>
   </div>
 </div>`;
@@ -345,9 +345,15 @@ Use ONE of: "SCHOOL PROJECTS & LEADERSHIP" OR "PROJECTS & OTHER EXPERIENCES"
 - Then <p class="cv-sub">Major courses: …</p> from the COURSE POOL
 
 === SKILLS / Certificates ===
-- SKILLS section only: Software + Language lines, then certificate names as bold text on their own cv-skills-line, e.g.
-  <p class="cv-skills-line"><strong>BEAM Affiliate</strong>; <strong>CFA - ESG</strong></p>
+- Under SKILLS, use three lines when possible:
+  <p class="cv-skills-line"><strong>Software:</strong> …</p>
+  <p class="cv-skills-line"><strong>Language:</strong> …</p>
+  <p class="cv-skills-line"><strong>Certificate:</strong> BEAM Affiliate; CFA - ESG</p>
+- Spell "Certificate" correctly (never "Ceitificate"). Bold ONLY the label "Certificate:".
 - NEVER use <h2>CERTIFICATES</h2>
+
+=== Chinese source content (MANDATORY) ===
+- If experience library / notes contain Chinese, translate into idiomatic Professional Resume English and INCLUDE those facts in bullets or fields. Never delete Chinese-only content silently.
 
 === Single-page A4 (fill, don't starve) ===
 - Aim for a visually full one-page CV: substantive bullets + normal spacing (CSS handles margins).
@@ -356,4 +362,4 @@ Use ONE of: "SCHOOL PROJECTS & LEADERSHIP" OR "PROJECTS & OTHER EXPERIENCES"
 === Rules ===
 - Classes ONLY: cv-section, cv-section-title, cv-entry, cv-row, cv-left, cv-role, cv-right, cv-bullets, cv-skills-line, cv-sub
 - NEVER put • / ● / - inside <li>
-- English only. Never invent facts. No <style>/markdown.`;
+- Output English only in HTML. Never invent facts. No <style>/markdown.`;

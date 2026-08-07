@@ -63,11 +63,10 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
 
   if (profile.skillsCertificate.trim()) {
     parts.push(
-      `## Certificates (bold each name under SKILLS — NO <h2>CERTIFICATES</h2> section)\n${profile.skillsCertificate
+      `## Certificate (under SKILLS — format exactly as: Certificate: name1; name2 — bold the label only)\nCertificate: ${profile.skillsCertificate
         .split(/[;，,]+/)
         .map((s) => s.trim())
         .filter(Boolean)
-        .map((s) => `**${s}**`)
         .join("; ")}`
     );
   }

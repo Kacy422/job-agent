@@ -27,7 +27,7 @@ interface Props {
 
 /**
  * A4 Visual Editor — prefer 1:1 rendering.
- * Only gently shrink when the column is narrower than A4 (never height-compress).
+ * Column scrolls vertically so the full preview remains reachable.
  */
 export function EditableCvPreview({
   initialHtml,
@@ -65,7 +65,6 @@ export function EditableCvPreview({
     const update = () => {
       const w = vp.clientWidth;
       if (w <= 0) return;
-      // 1:1 when space allows; mild width-only fit otherwise (floor ~0.88)
       const fitted = w >= A4_W_PX ? 1 : Math.max(0.88, w / A4_W_PX);
       setScale(Number.isFinite(fitted) ? fitted : 1);
     };
@@ -86,8 +85,8 @@ export function EditableCvPreview({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/50 bg-slate-100/40 p-3 sm:p-4">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-0.5">
+    <div className="flex max-h-[calc(100vh-7.5rem)] flex-col rounded-2xl border border-slate-200/50 bg-slate-100/40 p-3 sm:p-4">
+      <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2 px-0.5">
         <p className="text-[11px] font-medium text-slate-500">
           A4 CV · 标准字号 · 可编辑
         </p>
@@ -100,7 +99,8 @@ export function EditableCvPreview({
       />
       <div
         ref={viewportRef}
-        className="relative w-full overflow-x-auto overflow-y-visible"
+        className="min-h-0 flex-1 overflow-x-auto overflow-y-auto"
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
         <div
           className="relative mx-auto"

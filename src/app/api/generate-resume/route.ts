@@ -68,7 +68,8 @@ Rewrite ONLY using facts from the candidate's Full Experience Library.
 - Fill one A4 page evenly — avoid large empty gaps and avoid page-2 overflow.
 
 LANGUAGE RULE (MANDATORY):
-- tailoredResumeHtml: high-quality Business English for Hong Kong applications. NO Chinese inside the CV HTML.
+- Final tailoredResumeHtml MUST be Professional Resume English for Hong Kong applications (no Chinese characters in the HTML).
+- If the Full Experience Library, JD, or revision notes contain Chinese: NEVER discard those facts. First translate them accurately into idiomatic Professional Resume English, then weave the meaning into bullets / education / skills fields.
 - rationale: Simplified Chinese only (internal notes).
 
 Output STRICT JSON only (no markdown fences):
@@ -86,10 +87,12 @@ Output STRICT JSON only (no markdown fences):
 
 === HTML layout ===
 ${CV_HTML_SCHEMA_HINT}
-Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS (certificates as bold names inside SKILLS — no CERTIFICATES heading).
+Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS.
+Certificate line under SKILLS MUST be exactly: <p class="cv-skills-line"><strong>Certificate:</strong> BEAM Affiliate; CFA - ESG</p> (spell Certificate correctly — never "Ceitificate").
 Internship headers MUST be "Company, City" with role on the next line (cv-role).
 STRICT: every internship/work entry has EXACTLY 2 JD-matched, substantive bullet points.
 HKU degree line MUST include inline GPA: "MSc … | GPA: X.X/Y.Y".
+Chinese source text → translate to English and KEEP the facts (do not drop Chinese-only experience).
 
 ${coursePoolPromptBlock()}
 
@@ -108,7 +111,8 @@ ${
     ? `=== REVISION MODE ===
 You are refining an EXISTING tailored CV. Respect the current HTML structure/classes.
 Apply the user's revision notes precisely while staying grounded in the experience library and JD.
-Do not discard strong JD alignment already present unless the notes require it.`
+Do not discard strong JD alignment already present unless the notes require it.
+If revision notes are in Chinese, translate the intent into English CV edits — never ignore Chinese notes.`
     : ""
 }`,
           },
@@ -252,24 +256,40 @@ function normalizeHtml(raw: string): string {
     "$1"
   );
   html = html.replace(/\s*list-style[^;:"']*:[^;"']*;?/gi, "");
-  // Strip accidental CERTIFICATES section heading; keep body content under SKILLS flow
+  // Fix common certificate label misspellings (incl. Ceitificate)
+  html = html.replace(/\bCeitificates?\s*:/gi, "Certificate:");
+  html = html.replace(/\bCe[rt]{1,2}ificates?\s*:/gi, "Certificate:");
+  html = html.replace(/\bCertifications?\s*:/gi, "Certificate:");
+  // Normalize CERTIFICATES section → Certificate skills line
   html = html.replace(
-    /<section[^>]*>\s*<h2[^>]*>\s*CERTIFICATES\s*<\/h2>([\s\S]*?)<\/section>/gi,
+    /<section[^>]*>\s*<h2[^>]*>\s*CERTIFICATES?\s*<\/h2>([\s\S]*?)<\/section>/gi,
     (_m, body: string) => {
       const line = String(body)
         .replace(/<\/?p[^>]*>/gi, " ")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
+        .replace(/^Certificate\s*:\s*/i, "")
         .trim();
       if (!line) return "";
-      const bolded = line
-        .split(/[;，,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => `<strong>${s}</strong>`)
-        .join("; ");
-      return `<p class="cv-skills-line">${bolded}</p>`;
+      return `<p class="cv-skills-line"><strong>Certificate:</strong> ${line}</p>`;
     }
+  );
+  // Bold-only certificate names → Certificate: label format
+  html = html.replace(
+    /<p class="cv-skills-line">\s*(?:<strong>(?!Software:|Language:|Certificate:)([^<]+)<\/strong>\s*[;，,]?\s*)+<\/p>/gi,
+    (full) => {
+      if (/<strong>\s*Certificate\s*:/i.test(full)) return full;
+      const names = [...full.matchAll(/<strong>([^<]+)<\/strong>/gi)]
+        .map((m) => m[1].trim())
+        .filter(Boolean);
+      if (!names.length) return full;
+      return `<p class="cv-skills-line"><strong>Certificate:</strong> ${names.join("; ")}</p>`;
+    }
+  );
+  // Ensure Certificate: label is wrapped in <strong>
+  html = html.replace(
+    /(<p class="cv-skills-line">)\s*(?:<strong>)?Certificate\s*:(?:<\/strong>)?\s*/gi,
+    '$1<strong>Certificate:</strong> '
   );
   html = enforceTwoInternshipBullets(html);
   return html;
