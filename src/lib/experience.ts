@@ -47,7 +47,7 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
   const gpaScale = profile.gpaScale?.trim() || "4.0";
   if (gpaScore) {
     parts.push(
-      `## GPA (use on HKU MSc education line)\nGPA: ${gpaScore} / ${gpaScale}`
+      `## GPA (INLINE on HKU MSc degree line — same line, not a new paragraph)\nFormat exactly: MSc in Sustainable Environmental Design | GPA: ${gpaScore}/${gpaScale}`
     );
   }
 
@@ -63,7 +63,12 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
 
   if (profile.skillsCertificate.trim()) {
     parts.push(
-      `## Certificates (CERTIFICATES section title — bold)\n${profile.skillsCertificate.trim()}`
+      `## Certificates (bold each name under SKILLS — NO <h2>CERTIFICATES</h2> section)\n${profile.skillsCertificate
+        .split(/[;，,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => `**${s}**`)
+        .join("; ")}`
     );
   }
 
@@ -186,31 +191,35 @@ export function buildFullExperience(masterCv: string, extraNotes: string): strin
   return `${master}\n\n## Quick Notes\n${notes}`;
 }
 
-/** Keep HKU education detail GPA line in sync with profile.gpaScore / gpaScale */
+/** Keep HKU education detail GPA inline on the degree line */
 export function syncEducationGpa(profile: ProfileData): ProfileData {
   const score = profile.gpaScore?.trim();
   const scale = (profile.gpaScale?.trim() || "4.0").trim();
   if (!score) return profile;
-  const gpaLine = `GPA: ${score} / ${scale}`;
+  const gpaSuffix = `GPA: ${score}/${scale}`;
   let anyChanged = false;
   const education = profile.education.map((e) => {
     if (!/University of Hong Kong|HKU/i.test(e.headline)) return e;
     let detail = e.detail || "";
-    if (/GPA\s*:/i.test(detail)) {
-      const next = detail.replace(/GPA\s*:[^\n]*/i, gpaLine);
-      if (next === detail) return e;
-      anyChanged = true;
-      return { ...e, detail: next };
-    }
-    const lines = detail.split("\n");
-    if (lines.length) {
-      lines.splice(1, 0, gpaLine);
-      detail = lines.join("\n");
+    // Drop standalone GPA lines
+    detail = detail.replace(/\n?\s*GPA\s*:[^\n]*/gi, "").trim();
+    const lines = detail
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (!lines.length) {
+      lines.push(`MSc in Sustainable Environmental Design | ${gpaSuffix}`);
     } else {
-      detail = gpaLine;
+      const deg = lines[0]
+        .replace(/\s*\|\s*GPA\s*:.+$/i, "")
+        .replace(/\s+GPA\s*:.+$/i, "")
+        .trim();
+      lines[0] = `${deg} | ${gpaSuffix}`;
     }
+    const next = lines.join("\n");
+    if (next === (e.detail || "").trim()) return e;
     anyChanged = true;
-    return { ...e, detail };
+    return { ...e, detail: next };
   });
   return anyChanged ? { ...profile, education } : profile;
 }

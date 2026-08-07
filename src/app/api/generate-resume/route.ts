@@ -3,6 +3,7 @@ import { callDeepSeek, extractJson } from "@/lib/deepseek";
 import {
   CV_HTML_SCHEMA_HINT,
   buildFallbackCvHtml,
+  enforceTwoInternshipBullets,
 } from "@/lib/cv-template";
 import { coursePoolPromptBlock } from "@/lib/course-pool";
 import {
@@ -63,6 +64,8 @@ Rewrite ONLY using facts from the candidate's Full Experience Library.
 - Map library bullets to JD keywords / pain points (rephrase & prioritise; never invent employers, degrees, dates, or metrics).
 - Elevate matching experience; demote or trim low-relevance content.
 - Prefer quantified, achievement-oriented HK Business English.
+- Internship/work: EXACTLY 2 bullets per employer, tightly JD-aligned (merge facts; drop weak lines).
+- Fit everything on a single A4 page (concise wording).
 
 LANGUAGE RULE (MANDATORY):
 - tailoredResumeHtml: high-quality Business English for Hong Kong applications. NO Chinese inside the CV HTML.
@@ -83,9 +86,10 @@ Output STRICT JSON only (no markdown fences):
 
 === HTML layout ===
 ${CV_HTML_SCHEMA_HINT}
-Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS, then CERTIFICATES.
+Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS (certificates as bold names inside SKILLS — no CERTIFICATES heading).
 Internship headers MUST be "Company, City" with role on the next line (cv-role).
-CERTIFICATES must be its own <h2 class="cv-section-title">CERTIFICATES</h2> (same bold style as EDUCATION).
+STRICT: every internship/work entry has EXACTLY 2 JD-matched bullet points.
+HKU degree line MUST include inline GPA: "MSc … | GPA: X.X/Y.Y".
 
 ${coursePoolPromptBlock()}
 
@@ -248,5 +252,25 @@ function normalizeHtml(raw: string): string {
     "$1"
   );
   html = html.replace(/\s*list-style[^;:"']*:[^;"']*;?/gi, "");
+  // Strip accidental CERTIFICATES section heading; keep body content under SKILLS flow
+  html = html.replace(
+    /<section[^>]*>\s*<h2[^>]*>\s*CERTIFICATES\s*<\/h2>([\s\S]*?)<\/section>/gi,
+    (_m, body: string) => {
+      const line = String(body)
+        .replace(/<\/?p[^>]*>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!line) return "";
+      const bolded = line
+        .split(/[;，,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => `<strong>${s}</strong>`)
+        .join("; ");
+      return `<p class="cv-skills-line">${bolded}</p>`;
+    }
+  );
+  html = enforceTwoInternshipBullets(html);
   return html;
 }

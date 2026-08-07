@@ -761,7 +761,7 @@ export function ResumeGenerator() {
         emoji="📝"
         step="步骤 2 · 专属简历"
         title="一键改写 CV · 按需生成其他材料"
-        description="路径 A 粘贴链接（解析后 JD 自动填入）/ 路径 B 直接粘贴 JD。左侧窄栏 JD，中间 A4 预览。"
+        description="左侧 JD · 中间整页 A4 预览 · 右侧批注（比例 2:3:1）。实习每段 2 条要点，严格单页。"
         accent="teal"
         actions={
           <>
@@ -816,8 +816,8 @@ export function ResumeGenerator() {
         </p>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
-        <div className="min-w-0 max-w-[300px] space-y-4 xl:max-w-none">
+      <div className="grid gap-4 xl:grid-cols-[2fr_4fr]">
+        <div className="min-w-0 space-y-4">
           <div className="glass-panel p-4">
             <h3 className="mb-3 font-display text-lg text-slate-900">
               目标岗位

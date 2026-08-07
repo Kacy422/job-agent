@@ -220,7 +220,7 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
       id: eid("edu"),
       headline: "The University of Hong Kong",
       detail:
-        "MSc in Sustainable Environmental Design\nGPA: 3.8 / 4.0\nMajor courses: Green Building Assessment and Climate Responsive Design, Environmental Policy and Management of Megacities, Bioclimatic Architectural Design",
+        "MSc in Sustainable Environmental Design | GPA: 3.8/4.0\nMajor courses: Green Building Assessment and Climate Responsive Design, Environmental Policy and Management of Megacities, Bioclimatic Architectural Design",
       period: "Sept 2025 - Nov 2026",
       bullets: [],
     },
@@ -249,9 +249,8 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
       detail: "Landscape Architect Intern",
       period: "Jan - April 2025",
       bullets: [
-        "Conducted baseline site assessments and supported landscape planning for urban greening projects, integrating public consultation insights to identify environmental constraints and opportunities in line with sustainability and ESG principles",
-        "Assisted in preparation of project cost estimates and financial analyses, supporting resource allocation decisions with consideration of economic sustainability and lifecycle thinking",
-        "Researched local policies and regulatory frameworks related to urban greening and sustainable development, contributing to discussions on green infrastructure strategies, climate resilience, and low-impact development (LID) approaches",
+        "Conducted baseline site assessments and supported landscape planning for urban greening projects, integrating public consultation insights in line with sustainability and ESG principles",
+        "Researched local policies on urban greening and sustainable development, contributing to green infrastructure, climate resilience, and low-impact development (LID) approaches",
       ],
     },
   ],

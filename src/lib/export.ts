@@ -10,13 +10,19 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 /** 浏览器打印对话框导出 PDF */
+/** 浏览器打印对话框导出 PDF（单页 A4） */
 export function exportHtmlPdf(html: string, title = "CV") {
   const w = window.open("", "_blank");
   if (!w) return false;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title>
 <style>${CV_SHEET_CSS}
-body{margin:0;background:#fff;font-family:Arial,Helvetica,sans-serif;}
+html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;}
 .export-doc{padding:24px;font-size:14px;line-height:1.6;white-space:pre-wrap;}
+@media print{
+  @page{size:A4 portrait;margin:0}
+  html,body{width:210mm;height:297mm;overflow:hidden}
+  .cv-sheet{page-break-after:avoid;page-break-inside:avoid}
+}
 </style></head><body>${html}
 <script>window.onload=()=>{window.print();}</script></body></html>`);
   w.document.close();
