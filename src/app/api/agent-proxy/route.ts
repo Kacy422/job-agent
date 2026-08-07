@@ -11,12 +11,17 @@ export async function GET(req: Request) {
   const action = searchParams.get("action") || "status";
 
   if (action === "health") {
-    const result = await agentFetch("/health");
+    // Prefer /health, fall back to root /
+    let result = await agentFetch("/health", { timeoutMs: 5000 });
+    if (!result.ok) {
+      result = await agentFetch("/", { timeoutMs: 5000 });
+    }
     return NextResponse.json(
       result.ok
-        ? { ok: true, ...(result.data || {}) }
+        ? { ok: true, connected: true, ...(result.data || {}) }
         : {
             ok: false,
+            connected: false,
             error:
               result.data?.error ||
               "Agent 服务未启动。请打开终端在 agent/ 目录运行：python -m uvicorn main:app --port 8000",

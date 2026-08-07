@@ -18,10 +18,12 @@ import {
   buildApplyFormFields,
   profilePayloadForAgent,
 } from "@/lib/apply-profile";
+import { pingAgentDirect } from "@/lib/agent-client";
 import type { AgentPhase, Job, ProfileData } from "@/types";
 
 const AGENT_HINT =
   "请打开终端在 agent/ 目录运行：python -m uvicorn main:app --port 8000";
+const HEALTH_TIMEOUT_MS = 5000;
 
 function looksLikeUrl(text: string) {
   const t = text.trim();
@@ -107,23 +109,69 @@ export function AutoApply() {
 
   const checkAgentHealth = useCallback(async (silent = false) => {
     if (!silent) setReconnectLoading(true);
-    try {
-      const res = await fetch("/api/agent-proxy?action=health");
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.ok !== false) {
-        setAgentOffline(false);
+    const markOnline = (source: string) => {
+      setAgentOffline(false);
+      if (!silent) {
+        setError("");
+        pushLog(`Agent 已连接（${source}）`);
+      } else {
         setError((prev) =>
-          /Agent 服务|uvicorn|8000|未连接|未启动/i.test(prev) ? "" : prev
+          /Agent 服务|uvicorn|8000|未连接|未启动|健康检查|直连|超时/i.test(
+            prev
+          )
+            ? ""
+            : prev
         );
-        return true;
       }
+      return true as const;
+    };
+    const markOffline = (msg: string) => {
       setAgentOffline(true);
-      if (!silent) setError(String(data.error || AGENT_HINT));
-      return false;
-    } catch {
-      setAgentOffline(true);
-      if (!silent) setError(AGENT_HINT);
-      return false;
+      if (!silent) setError(msg || AGENT_HINT);
+      return false as const;
+    };
+
+    try {
+      // 1) Next.js proxy → Agent (server-side)
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+      try {
+        const res = await fetch("/api/agent-proxy?action=health", {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (
+          res.ok &&
+          data.ok !== false &&
+          data.connected !== false
+        ) {
+          return markOnline("proxy /health");
+        }
+      } catch (err) {
+        const aborted =
+          err instanceof Error && err.name === "AbortError";
+        if (!silent && aborted) {
+          // fall through to direct ping
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+
+      // 2) Browser direct → http://127.0.0.1:8000 (needs CORS)
+      const direct = await pingAgentDirect(HEALTH_TIMEOUT_MS);
+      if (direct.ok) {
+        return markOnline("direct 127.0.0.1:8000");
+      }
+
+      return markOffline(
+        String(direct.error || AGENT_HINT)
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "健康检查失败";
+      return markOffline(`${AGENT_HINT}\n（${msg}）`);
     } finally {
       if (!silent) setReconnectLoading(false);
     }

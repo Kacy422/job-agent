@@ -100,6 +100,7 @@ app = FastAPI(title="JobAgent Auto-Apply Agent", version="1.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -107,9 +108,16 @@ app.add_middleware(
 SESSIONS: dict[str, SessionBundle] = {}
 
 
+@app.get("/")
 @app.get("/health")
 async def health():
-    return {"ok": True, "sessions": len(SESSIONS)}
+    """Root + /health — used by frontend reconnect / proxy health checks."""
+    return {
+        "ok": True,
+        "status": "online",
+        "sessions": len(SESSIONS),
+        "service": "JobAgent Auto-Apply Agent",
+    }
 
 
 @app.post("/sessions/start")
