@@ -10,10 +10,19 @@ import {
   type CvRationale,
 } from "@/types";
 
+export type CvApiHighlight = {
+  id?: string;
+  kind?: "added" | "removed" | "changed";
+  phrase?: string;
+  label?: string;
+  reason?: string;
+};
+
 export type RewriteResult = {
   tailoredResumeHtml: string;
   rationale: CvRationale;
   rationaleList?: string[];
+  highlights?: CvApiHighlight[];
   demo?: boolean;
 };
 
@@ -64,7 +73,11 @@ Output STRICT JSON only (no markdown fences):
   "rationale": {
     "added": [{"text":"增加的内容","reason":"简明原因"}],
     "removed": [{"text":"删减的内容","reason":"简明原因"}]
-  }
+  },
+  "highlights": [
+    {"id":"h1","kind":"added","phrase":"exact English substring copied from tailoredResumeHtml","label":"中文简述","reason":"简明原因"},
+    {"id":"h2","kind":"changed","phrase":"another exact English phrase from the HTML","label":"中文简述","reason":"简明原因"}
+  ]
 }
 
 === HTML layout ===
@@ -76,6 +89,11 @@ Internship headers MUST be "Company, City" with role on the next line (cv-role).
 - added【增加】: 1–3 items {text, reason} — new JD keywords / metrics / stronger verbs you emphasised.
 - removed【减少】: 1–2 items {text, reason} — what you cut as low relevance.
 Keep ultra-concise. No English / Traditional Chinese in rationale.
+
+=== highlights (for Word-style review UI) ===
+- 2–4 items. Each "phrase" MUST be copied VERBATIM from tailoredResumeHtml (English text that appears in the CV body).
+- kind: "added" | "changed" only (do not invent phrases that are absent from the HTML).
+- label + reason: Simplified Chinese.
 
 ${
   isRevision
@@ -100,12 +118,14 @@ Do not discard strong JD alignment already present unless the notes require it.`
         tailoredResumeHtml?: string;
         rationale?: unknown;
         rationaleList?: unknown;
+        highlights?: CvApiHighlight[];
       }>(content);
 
       const html = normalizeHtml(parsed.tailoredResumeHtml || "");
       const rationale = ensureRationale(
         normalizeCvRationale(parsed.rationale ?? parsed.rationaleList)
       );
+      const highlights = normalizeHighlights(parsed.highlights, html);
 
       if (!html) {
         return NextResponse.json(
@@ -118,6 +138,7 @@ Do not discard strong JD alignment already present unless the notes require it.`
         tailoredResumeHtml: html,
         rationale,
         rationaleList: flattenRationale(rationale),
+        highlights,
       } satisfies RewriteResult);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -136,10 +157,20 @@ Do not discard strong JD alignment already present unless the notes require it.`
             },
           ],
         };
+        const demoHtml = currentCvHtml || buildFallbackCvHtml();
         return NextResponse.json({
-          tailoredResumeHtml: currentCvHtml || buildFallbackCvHtml(),
+          tailoredResumeHtml: demoHtml,
           rationale: demoRationale,
           rationaleList: flattenRationale(demoRationale),
+          highlights: [
+            {
+              id: "h1",
+              kind: "added",
+              phrase: "ESG",
+              label: "ESG / 气候韧性关键词",
+              reason: "演示模式示意匹配 JD",
+            },
+          ],
           demo: true,
         } satisfies RewriteResult);
       }
@@ -152,6 +183,28 @@ Do not discard strong JD alignment already present unless the notes require it.`
   } catch {
     return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
   }
+}
+
+function normalizeHighlights(
+  raw: CvApiHighlight[] | undefined,
+  html: string
+): CvApiHighlight[] {
+  if (!Array.isArray(raw)) return [];
+  const plain = html.replace(/<[^>]+>/g, " ");
+  return raw
+    .map((h, i) => {
+      const phrase = String(h?.phrase || "").trim();
+      if (phrase.length < 2) return null;
+      if (!plain.toLowerCase().includes(phrase.toLowerCase())) return null;
+      return {
+        id: String(h?.id || `h${i + 1}`),
+        kind: h?.kind === "changed" ? "changed" : "added",
+        phrase,
+        label: String(h?.label || "").trim(),
+        reason: String(h?.reason || "").trim(),
+      } satisfies CvApiHighlight;
+    })
+    .filter(Boolean) as CvApiHighlight[];
 }
 
 function ensureRationale(r: CvRationale): CvRationale {

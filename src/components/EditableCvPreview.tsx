@@ -1,45 +1,52 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type MutableRefObject,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { CV_SHEET_CSS } from "@/lib/cv-template";
 
 interface Props {
   initialHtml: string;
+  /** Bump to force re-seed of editor content (e.g. after AI rewrite) */
+  contentKey?: string | number;
   onHtmlChange: (html: string) => void;
   exportRef: RefObject<HTMLDivElement | null>;
   toolbar?: ReactNode;
   extraCss?: string;
 }
 
-/** A4 Visual Editor — contentEditable, print uses live DOM */
+/** A4 Visual Editor — contentEditable; resets when contentKey changes */
 export function EditableCvPreview({
   initialHtml,
+  contentKey = 0,
   onHtmlChange,
   exportRef,
   toolbar,
   extraCss,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
-  const seeded = useRef(false);
+  const lastKey = useRef<string | number | null>(null);
 
   function bindRef(node: HTMLDivElement | null) {
     hostRef.current = node;
     if (exportRef) {
-      (exportRef as React.MutableRefObject<HTMLDivElement | null>).current =
-        node;
+      (exportRef as MutableRefObject<HTMLDivElement | null>).current = node;
     }
   }
 
   useEffect(() => {
     const el = hostRef.current;
     if (!el || !initialHtml) return;
-    if (!seeded.current) {
-      el.innerHTML = initialHtml;
-      seeded.current = true;
-      onHtmlChange(el.innerHTML);
-    }
+    if (lastKey.current === contentKey && el.innerHTML) return;
+    lastKey.current = contentKey;
+    el.innerHTML = initialHtml;
+    onHtmlChange(el.innerHTML);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialHtml]);
+  }, [contentKey, initialHtml]);
 
   function flush() {
     const el = hostRef.current;
@@ -48,10 +55,10 @@ export function EditableCvPreview({
   }
 
   return (
-    <div className="glass-panel overflow-auto bg-slate-100/40 p-3 sm:p-5">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-        <p className="text-xs font-medium text-slate-600">
-          A4 Visual Editor · 点击文字直接修改 · 拉满单页
+    <div className="overflow-auto rounded-2xl border border-slate-200/50 bg-slate-100/40 p-3 sm:p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-0.5">
+        <p className="text-[11px] font-medium text-slate-500">
+          A4 CV · 可直接编辑
         </p>
         <div className="flex flex-wrap items-center gap-1.5">{toolbar}</div>
       </div>
@@ -60,7 +67,7 @@ export function EditableCvPreview({
           __html: `${CV_SHEET_CSS}\n${extraCss || ""}`,
         }}
       />
-      <div className="cv-a4-frame overflow-hidden bg-white">
+      <div className="cv-a4-frame overflow-hidden bg-white shadow-sm">
         <div
           ref={bindRef}
           contentEditable
