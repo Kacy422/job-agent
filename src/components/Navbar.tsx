@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   UserRound,
   FileText,
@@ -22,21 +23,38 @@ export function Navbar() {
     (a) => a.trackStatus !== "applied"
   ).length;
 
+  const [flashSaved, setFlashSaved] = useState(false);
+  const prevStatus = useRef(syncStatus);
+
+  useEffect(() => {
+    if (
+      (prevStatus.current === "saving" || prevStatus.current === "loading") &&
+      syncStatus === "synced"
+    ) {
+      setFlashSaved(true);
+      const t = setTimeout(() => setFlashSaved(false), 2200);
+      return () => clearTimeout(t);
+    }
+    prevStatus.current = syncStatus;
+  }, [syncStatus]);
+
   const syncLabel =
     syncStatus === "loading"
       ? "云端加载中…"
       : syncStatus === "saving"
-        ? "同步中…"
-        : syncStatus === "synced"
-          ? "已同步云端"
+        ? "正在保存到云端…"
+        : flashSaved || syncStatus === "synced"
+          ? flashSaved
+            ? "云端已保存"
+            : "云端已同步"
           : syncStatus === "offline"
-            ? "仅本机缓存"
+            ? "Redis 未连接"
             : syncStatus === "error"
-              ? "同步失败"
+              ? "云端同步失败"
               : "";
 
   const syncClass =
-    syncStatus === "synced"
+    syncStatus === "synced" || flashSaved
       ? "text-emerald-600"
       : syncStatus === "error"
         ? "text-rose-600"
@@ -62,7 +80,10 @@ export function Navbar() {
                 : ""}
               {activeCount > 0 ? ` · ${activeCount} 进行中` : ""}
               {syncLabel ? (
-                <span className={`ml-2 ${syncClass}`} title={syncError || syncLabel}>
+                <span
+                  className={`ml-2 font-medium ${syncClass}`}
+                  title={syncError || syncLabel}
+                >
                   · {syncLabel}
                 </span>
               ) : null}

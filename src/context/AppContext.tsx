@@ -217,7 +217,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     applyPack,
   ]);
 
-  /** Load: Redis → else localStorage (migrate up) → else defaults */
+  /** Load: Redis is source of truth; localStorage is offline cache only */
   useEffect(() => {
     let cancelled = false;
 
@@ -256,9 +256,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           if (local) applySnapshot(local, setters);
           setSyncStatus("offline");
           setSyncError(
-            String(json.error || "Redis 未配置，当前仅使用本机缓存")
+            String(
+              json.error ||
+                "Redis 未配置。请在 Vercel 绑定 Upstash 并设置 REST URL/TOKEN"
+            )
           );
-        } else if (json.empty || !json.data) {
+        } else if (json.empty || (res.ok && !json.data)) {
           if (local) {
             applySnapshot(local, setters);
             try {
@@ -267,20 +270,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(local),
               });
-              if (put.ok) {
+              const putJson = await put.json().catch(() => ({}));
+              if (put.ok && putJson.ok) {
                 setSyncStatus("synced");
                 setSyncError("");
               } else {
                 setSyncStatus("error");
-                setSyncError("本地数据迁移到 Redis 失败");
+                setSyncError(
+                  String(putJson.error || "首次上传本机数据到云端失败")
+                );
               }
             } catch {
               setSyncStatus("error");
-              setSyncError("本地数据迁移到 Redis 失败");
+              setSyncError("首次上传本机数据到云端失败");
             }
           } else {
             setProfile(structuredClone(DEFAULT_PROFILE_FROM_CV));
+            try {
+              const snap = normalizeWorkspaceSnapshot({
+                profile: structuredClone(DEFAULT_PROFILE_FROM_CV),
+              });
+              await fetch("/api/workspace", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(snap),
+              });
+            } catch {
+              /* ignore seed failure */
+            }
             setSyncStatus("synced");
+            setSyncError("");
           }
         } else {
           if (local) applySnapshot(local, setters);
@@ -291,7 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         if (local) applySnapshot(local, setters);
         setSyncStatus("offline");
-        setSyncError("无法连接云端，已加载本机缓存");
+        setSyncError("无法连接云端 API，已临时使用本机缓存");
       }
 
       if (!cancelled) {
@@ -306,7 +325,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  /** Persist: localStorage immediately + debounced Redis */
+  /** Persist: always attempt Redis (never permanently stuck offline) */
   useEffect(() => {
     if (!hydrated) return;
     if (skipNextSaveRef.current) {
@@ -319,7 +338,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
-      setSyncStatus((s) => (s === "offline" ? s : "saving"));
+      setSyncStatus("saving");
       try {
         const res = await fetch("/api/workspace", {
           method: "PUT",
@@ -335,13 +354,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setSyncError(String(json.error || "Redis 未配置"));
         } else {
           setSyncStatus("error");
-          setSyncError(String(json.error || "保存到 Redis 失败"));
+          setSyncError(String(json.error || "保存到云端失败"));
         }
       } catch {
         setSyncStatus("error");
-        setSyncError("保存到云端失败（本机缓存已更新）");
+        setSyncError("保存到云端失败（已写入本机缓存作备份）");
       }
-    }, 600);
+    }, 500);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -370,12 +389,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSyncError(error);
         return { ok: false as const, error };
       }
-      const error = String(json.error || "保存到 Redis 失败");
+      const error = String(json.error || "保存到云端失败");
       setSyncStatus("error");
       setSyncError(error);
       return { ok: false as const, error };
     } catch {
-      const error = "保存到云端失败（本机缓存已更新）";
+      const error = "保存到云端失败（已写入本机缓存作备份）";
       setSyncStatus("error");
       setSyncError(error);
       return { ok: false as const, error };

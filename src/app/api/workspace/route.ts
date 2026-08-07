@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getRedis, redisConfigured, workspaceRedisKey } from "@/lib/redis";
+import {
+  getRedis,
+  redisConfigured,
+  redisConfigHint,
+  workspaceRedisKey,
+} from "@/lib/redis";
 import {
   emptyWorkspaceSnapshot,
   normalizeWorkspaceSnapshot,
@@ -9,15 +14,26 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** GET — load workspace from Redis */
+function parseStored(raw: unknown): WorkspaceSnapshot | null {
+  if (raw == null) return null;
+  try {
+    const parsed =
+      typeof raw === "string" ? JSON.parse(raw) : (raw as unknown);
+    return normalizeWorkspaceSnapshot(parsed);
+  } catch (err) {
+    console.error("[workspace] parse stored value failed", err);
+    return null;
+  }
+}
+
+/** GET — load workspace from Redis (source of truth) */
 export async function GET() {
   if (!redisConfigured()) {
     return NextResponse.json(
       {
         ok: false,
         configured: false,
-        error:
-          "Redis 未配置。请在 Vercel / .env.local 设置 UPSTASH_REDIS_REST_URL 与 UPSTASH_REDIS_REST_TOKEN",
+        error: redisConfigHint(),
         data: null,
       },
       { status: 503 }
@@ -27,26 +43,36 @@ export async function GET() {
   try {
     const redis = getRedis()!;
     const key = workspaceRedisKey();
-    const raw = await redis.get<WorkspaceSnapshot | string>(key);
+    const raw = await redis.get(key);
 
     if (raw == null) {
       return NextResponse.json({
         ok: true,
         configured: true,
         empty: true,
+        key,
         data: null,
       });
     }
 
-    // Upstash may auto-deserialize JSON, or return a string
-    const parsed =
-      typeof raw === "string" ? JSON.parse(raw) : (raw as unknown);
-    const data = normalizeWorkspaceSnapshot(parsed);
+    const data = parseStored(raw);
+    if (!data) {
+      return NextResponse.json(
+        {
+          ok: false,
+          configured: true,
+          error: "云端数据格式损坏，请重新保存",
+          data: null,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       ok: true,
       configured: true,
       empty: false,
+      key,
       data,
     });
   } catch (err) {
@@ -63,14 +89,14 @@ export async function GET() {
   }
 }
 
-/** PUT — save workspace to Redis */
+/** PUT — save workspace to Redis (source of truth) */
 export async function PUT(req: Request) {
   if (!redisConfigured()) {
     return NextResponse.json(
       {
         ok: false,
         configured: false,
-        error: "Redis 未配置",
+        error: redisConfigHint(),
       },
       { status: 503 }
     );
@@ -87,10 +113,23 @@ export async function PUT(req: Request) {
 
     const redis = getRedis()!;
     const key = workspaceRedisKey();
-    await redis.set(key, snapshot);
+
+    // Explicit JSON string avoids rare double-encode edge cases across SDK versions
+    await redis.set(key, JSON.stringify(snapshot));
+
+    // Verify write (ensures multi-device can read what we just saved)
+    const verify = await redis.get(key);
+    if (verify == null) {
+      return NextResponse.json(
+        { ok: false, error: "写入 Redis 后校验失败（值为空）" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       ok: true,
+      configured: true,
+      key,
       updatedAt: snapshot.updatedAt,
     });
   } catch (err) {
@@ -105,10 +144,13 @@ export async function PUT(req: Request) {
   }
 }
 
-/** DELETE — reset workspace (optional) */
+/** DELETE — reset workspace */
 export async function DELETE() {
   if (!redisConfigured()) {
-    return NextResponse.json({ ok: false, configured: false }, { status: 503 });
+    return NextResponse.json(
+      { ok: false, configured: false, error: redisConfigHint() },
+      { status: 503 }
+    );
   }
   try {
     const redis = getRedis()!;
