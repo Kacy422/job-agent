@@ -18,12 +18,14 @@ import {
   buildApplyFormFields,
   profilePayloadForAgent,
 } from "@/lib/apply-profile";
-import { pingAgentDirect } from "@/lib/agent-client";
+import { pingAgentHealth } from "@/lib/agent-client";
 import type { AgentPhase, Job, ProfileData } from "@/types";
 
 const AGENT_HINT =
   "请打开终端在 agent/ 目录运行：python -m uvicorn main:app --port 8000";
 const HEALTH_TIMEOUT_MS = 5000;
+/** Same-origin rewrite → http://127.0.0.1:8000 (see next.config.js) */
+const AGENT_API = "/api/agent";
 
 function looksLikeUrl(text: string) {
   const t = text.trim();
@@ -93,10 +95,9 @@ export function AutoApply() {
   const resetAgentRuntime = useCallback(() => {
     const sid = agentSessionIdRef.current;
     if (sid) {
-      void fetch("/api/agent-proxy", {
+      void fetch(`${AGENT_API}/sessions/${encodeURIComponent(sid)}/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stop", sessionId: sid }),
       }).catch(() => undefined);
     }
     setPhase("idle");
@@ -116,7 +117,7 @@ export function AutoApply() {
         pushLog(`Agent 已连接（${source}）`);
       } else {
         setError((prev) =>
-          /Agent 服务|uvicorn|8000|未连接|未启动|健康检查|直连|超时/i.test(
+          /Agent 服务|uvicorn|8000|未连接|未启动|健康检查|直连|超时|\/api\/agent/i.test(
             prev
           )
             ? ""
@@ -132,42 +133,11 @@ export function AutoApply() {
     };
 
     try {
-      // 1) Next.js proxy → Agent (server-side)
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
-      try {
-        const res = await fetch("/api/agent-proxy?action=health", {
-          method: "GET",
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const data = await res.json().catch(() => ({}));
-        if (
-          res.ok &&
-          data.ok !== false &&
-          data.connected !== false
-        ) {
-          return markOnline("proxy /health");
-        }
-      } catch (err) {
-        const aborted =
-          err instanceof Error && err.name === "AbortError";
-        if (!silent && aborted) {
-          // fall through to direct ping
-        }
-      } finally {
-        clearTimeout(timer);
+      const result = await pingAgentHealth(HEALTH_TIMEOUT_MS);
+      if (result.ok) {
+        return markOnline(result.source || AGENT_API);
       }
-
-      // 2) Browser direct → http://127.0.0.1:8000 (needs CORS)
-      const direct = await pingAgentDirect(HEALTH_TIMEOUT_MS);
-      if (direct.ok) {
-        return markOnline("direct 127.0.0.1:8000");
-      }
-
-      return markOffline(
-        String(direct.error || AGENT_HINT)
-      );
+      return markOffline(String(result.error || AGENT_HINT));
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "健康检查失败";
@@ -203,7 +173,8 @@ export function AutoApply() {
     const timer = setInterval(async () => {
       try {
         const res = await fetch(
-          `/api/agent-proxy?action=status&sessionId=${encodeURIComponent(agentSessionId)}`
+          `${AGENT_API}/sessions/${encodeURIComponent(agentSessionId)}`,
+          { cache: "no-store" }
         );
         const data = await res.json();
         if (cancelled) return;
@@ -379,11 +350,10 @@ export function AutoApply() {
         company: displayCompany || selectedJob?.company,
       });
 
-      const res = await fetch("/api/agent-proxy", {
+      const res = await fetch(`${AGENT_API}/sessions/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "start",
           jobId: selectedJob?.id || crypto.randomUUID(),
           applyUrl: targetUrl,
           masterCv: tailoredResume || fullExperience || masterCv,
@@ -434,14 +404,14 @@ export function AutoApply() {
     setError("");
     pushLog("Confirm login → scan & fill");
     try {
-      const res = await fetch("/api/agent-proxy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "confirm-login",
-          sessionId: agentSessionId,
-        }),
-      });
+      const res = await fetch(
+        `${AGENT_API}/sessions/${encodeURIComponent(agentSessionId)}/confirm-login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "确认登录失败");
       setPhase(data.phase || "filling");
@@ -499,21 +469,22 @@ export function AutoApply() {
         }));
       }
 
-      const res = await fetch("/api/agent-proxy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "provide-profile",
-          sessionId: agentSessionId,
-          profile: profilePayloadForAgent({
-            ...profile,
-            ...patch,
-            applyExtras: { ...profile.applyExtras, ...nextExtras },
-          } as ProfileData),
-          answers,
-          skipMissing: skip,
-        }),
-      });
+      const res = await fetch(
+        `${AGENT_API}/sessions/${encodeURIComponent(agentSessionId)}/provide-profile`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profile: profilePayloadForAgent({
+              ...profile,
+              ...patch,
+              applyExtras: { ...profile.applyExtras, ...nextExtras },
+            } as ProfileData),
+            answers,
+            skipMissing: skip,
+          }),
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "补充画像失败");
       setPhase(data.phase || "filling");
@@ -538,11 +509,13 @@ export function AutoApply() {
     if (!agentSessionId) return;
     setAgentLoading(true);
     try {
-      await fetch("/api/agent-proxy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stop", sessionId: agentSessionId }),
-      });
+      await fetch(
+        `${AGENT_API}/sessions/${encodeURIComponent(agentSessionId)}/stop`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
       setPhase("stopped");
       setAgentMessage("已停止");
       setAgentSessionId(null);
