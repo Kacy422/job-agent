@@ -62,12 +62,18 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
   if (skills.length) parts.push(`## Skills\n${skills.join("\n")}`);
 
   if (profile.skillsCertificate.trim()) {
+    const names = profile.skillsCertificate
+      .split(/[;，,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
     parts.push(
-      `## Certificate (under SKILLS — format exactly as: Certificate: name1; name2 — bold the label only)\nCertificate: ${profile.skillsCertificate
-        .split(/[;，,]+/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .join("; ")}`
+      `## Certificate (REQUIRED under SKILLS — bold label AND each name)\nHTML form: <strong>Certificate:</strong> ${names
+        .map((n) => `<strong>${n}</strong>`)
+        .join("; ")}\nPlain: Certificate: ${names.join("; ")}`
+    );
+  } else {
+    parts.push(
+      `## Certificate (REQUIRED under SKILLS)\nCertificate: BEAM Affiliate; CFA - ESG`
     );
   }
 

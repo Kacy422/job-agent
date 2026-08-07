@@ -59,12 +59,14 @@ From the Target JD, extract:
 3) Role pain points / must-haves (what the hiring manager needs solved)
 4) Preferred seniority / education signals
 
-=== STEP B — GROUNDED REWRITE ===
+=== STEP B — GROUNDED STAR REWRITE ===
 Rewrite ONLY using facts from the candidate's Full Experience Library.
-- Map library bullets to JD keywords / pain points (rephrase & prioritise; never invent employers, degrees, dates, or metrics).
-- Elevate matching experience; demote or trim low-relevance content.
-- Prefer quantified, achievement-oriented HK Business English.
-- Internship/work: EXACTLY 2 substantial JD-matched bullets per employer (full sentences with outcomes; not sparse one-liners).
+- Map library material to JD keywords / pain points (rephrase & prioritise; never invent employers, degrees, dates, or metrics).
+- MERGE similar / fragmented duties into clear themes — ban laundry-list micro-bullets.
+- Internship / Work / Leadership: EXACTLY 2 core bullets per entry.
+- Each bullet = Action Verb + Task/Context + Tools/Methods + Quantifiable Impact (or clear decision-support value if no number).
+  Example: "Modelled microclimate scenarios with ENVI-met / GIS to quantify outdoor thermal comfort, synthesising findings into ESG-aligned recommendations that informed design decisions."
+- Fluency: idiomatic, coherent Professional Resume English tightly matched to the Target JD.
 - Fill one A4 page evenly — avoid large empty gaps and avoid page-2 overflow.
 
 LANGUAGE RULE (MANDATORY):
@@ -88,9 +90,11 @@ Output STRICT JSON only (no markdown fences):
 === HTML layout ===
 ${CV_HTML_SCHEMA_HINT}
 Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS.
-Certificate line under SKILLS MUST be exactly: <p class="cv-skills-line"><strong>Certificate:</strong> BEAM Affiliate; CFA - ESG</p> (spell Certificate correctly — never "Ceitificate").
+SKILLS MUST include Certificate line; format EXACTLY:
+<p class="cv-skills-line"><strong>Certificate:</strong> <strong>BEAM Affiliate</strong>; <strong>CFA - ESG</strong></p>
+(spell Certificate correctly — never "Ceitificate"; bold label AND each certificate name).
 Internship headers MUST be "Company, City" with role on the next line (cv-role).
-STRICT: every internship/work entry has EXACTLY 2 JD-matched, substantive bullet points.
+STRICT STAR bullets: every internship/work/leadership entry has EXACTLY 2 merged, JD-matched bullets (Verb + Task + Tools + Impact).
 HKU degree line MUST include inline GPA: "MSc … | GPA: X.X/Y.Y".
 Chinese source text → translate to English and KEEP the facts (do not drop Chinese-only experience).
 
@@ -260,7 +264,7 @@ function normalizeHtml(raw: string): string {
   html = html.replace(/\bCeitificates?\s*:/gi, "Certificate:");
   html = html.replace(/\bCe[rt]{1,2}ificates?\s*:/gi, "Certificate:");
   html = html.replace(/\bCertifications?\s*:/gi, "Certificate:");
-  // Normalize CERTIFICATES section → Certificate skills line
+  // Normalize CERTIFICATES section → Certificate skills line (label + names bold)
   html = html.replace(
     /<section[^>]*>\s*<h2[^>]*>\s*CERTIFICATES?\s*<\/h2>([\s\S]*?)<\/section>/gi,
     (_m, body: string) => {
@@ -271,26 +275,84 @@ function normalizeHtml(raw: string): string {
         .replace(/^Certificate\s*:\s*/i, "")
         .trim();
       if (!line) return "";
-      return `<p class="cv-skills-line"><strong>Certificate:</strong> ${line}</p>`;
+      return formatCertificateSkillsLine(line);
     }
   );
-  // Bold-only certificate names → Certificate: label format
+  // Any Certificate skills line → bold label + bold each name
+  html = html.replace(
+    /<p class="cv-skills-line">[\s\S]*?Certificate\s*:[\s\S]*?<\/p>/gi,
+    (full) => {
+      const text = full
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^[\s\S]*?Certificate\s*:/i, "")
+        .trim();
+      if (!text) {
+        return formatCertificateSkillsLine("BEAM Affiliate; CFA - ESG");
+      }
+      return formatCertificateSkillsLine(text);
+    }
+  );
+  // Bold-only certificate name lines (no Certificate label) → full format
   html = html.replace(
     /<p class="cv-skills-line">\s*(?:<strong>(?!Software:|Language:|Certificate:)([^<]+)<\/strong>\s*[;，,]?\s*)+<\/p>/gi,
     (full) => {
-      if (/<strong>\s*Certificate\s*:/i.test(full)) return full;
+      if (/Certificate\s*:/i.test(full)) return full;
       const names = [...full.matchAll(/<strong>([^<]+)<\/strong>/gi)]
         .map((m) => m[1].trim())
         .filter(Boolean);
       if (!names.length) return full;
-      return `<p class="cv-skills-line"><strong>Certificate:</strong> ${names.join("; ")}</p>`;
+      return formatCertificateSkillsLine(names.join("; "));
     }
   );
-  // Ensure Certificate: label is wrapped in <strong>
-  html = html.replace(
-    /(<p class="cv-skills-line">)\s*(?:<strong>)?Certificate\s*:(?:<\/strong>)?\s*/gi,
-    '$1<strong>Certificate:</strong> '
-  );
+  // Ensure SKILLS section always has a Certificate line
+  if (
+    /<h2[^>]*>\s*SKILLS\s*<\/h2>/i.test(html) &&
+    !/Certificate\s*:/i.test(html)
+  ) {
+    html = html.replace(
+      /(<h2[^>]*>\s*SKILLS\s*<\/h2>)([\s\S]*?)(<\/section>)/i,
+      (_m, title: string, body: string, close: string) =>
+        `${title}${body}${formatCertificateSkillsLine(
+          "BEAM Affiliate; CFA - ESG"
+        )}${close}`
+    );
+  }
   html = enforceTwoInternshipBullets(html);
+  // Also cap leadership/projects bullets at 2 when under PROJECTS / LEADERSHIP
+  html = enforceTwoBulletsInSection(html, /PROJECTS|LEADERSHIP/i);
   return html;
+}
+
+function formatCertificateSkillsLine(rawNames: string): string {
+  const names = rawNames
+    .split(/[;，,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => s.replace(/^Certificate\s*:\s*/i, "").trim())
+    .filter(Boolean);
+  const list = (names.length ? names : ["BEAM Affiliate", "CFA - ESG"])
+    .map((n) => `<strong>${n}</strong>`)
+    .join("; ");
+  return `<p class="cv-skills-line"><strong>Certificate:</strong> ${list}</p>`;
+}
+
+/** Cap bullet lists to 2 items inside a section whose title matches */
+function enforceTwoBulletsInSection(html: string, titleRe: RegExp): string {
+  return html.replace(
+    /(<h2[^>]*>)([\s\S]*?)(<\/h2>)([\s\S]*?)(?=<h2\b|$)/gi,
+    (full, open: string, titleInner: string, close: string, body: string) => {
+      if (!titleRe.test(titleInner.replace(/<[^>]+>/g, " "))) return full;
+      const trimmed = body.replace(
+        /(<ul[^>]*class="[^"]*cv-bullets[^"]*"[^>]*>)([\s\S]*?)(<\/ul>)/gi,
+        (_u, ulOpen: string, inner: string, ulClose: string) => {
+          const items = [...inner.matchAll(/<li\b[^>]*>[\s\S]*?<\/li>/gi)].map(
+            (m) => m[0]
+          );
+          return `${ulOpen}${items.slice(0, 2).join("")}${ulClose}`;
+        }
+      );
+      return `${open}${titleInner}${close}${trimmed}`;
+    }
+  );
 }
