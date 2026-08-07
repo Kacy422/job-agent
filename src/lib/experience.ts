@@ -54,26 +54,18 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
   if (intern) parts.push(intern);
   if (proj) parts.push(proj);
 
-  const skills: string[] = [];
-  if (profile.skillsSoftware.trim())
-    skills.push(`Software: ${profile.skillsSoftware.trim()}`);
-  if (profile.skillsLanguage.trim())
-    skills.push(`Language: ${profile.skillsLanguage.trim()}`);
-  if (skills.length) parts.push(`## Skills\n${skills.join("\n")}`);
+  const skillsSoftware =
+    profile.skillsSoftware.trim() ||
+    "Microsoft Office, ArcGIS, Google Earth Engine, Photoshop, Adobe Illustrator, InDesign, Adobe Premiere Pro, ENVI-met, 3D Modeling Software";
+  const skillsLanguage =
+    profile.skillsLanguage.trim() ||
+    "IELTS 7.0; CANTONESE (advanced); MANDARIN (native speaker)";
+  const skillsCertificate =
+    profile.skillsCertificate.trim() || "BEAM Affiliate; CFA - ESG";
 
-  if (profile.skillsCertificate.trim()) {
-    const names = profile.skillsCertificate
-      .split(/[;，,]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    parts.push(
-      `## Certificate (REQUIRED under SKILLS — bold label ONLY, normal-weight names)\nHTML: <strong>Certificate:</strong> ${names.join("; ")}\nPlain: Certificate: ${names.join("; ")}`
-    );
-  } else {
-    parts.push(
-      `## Certificate (REQUIRED under SKILLS)\nCertificate: BEAM Affiliate; CFA - ESG`
-    );
-  }
+  parts.push(
+    `## Skills (REQUIRED — always include all three lines in CV HTML)\nSoftware: ${skillsSoftware}\nLanguage: ${skillsLanguage}\nCertificate: ${skillsCertificate}\nHTML form (bold labels only):\n<strong>Software:</strong> ${skillsSoftware}\n<strong>Language:</strong> ${skillsLanguage}\n<strong>Certificate:</strong> ${skillsCertificate}`
+  );
 
   if (profile.quickNotes.trim()) {
     parts.push(`## Quick Notes\n${profile.quickNotes.trim()}`);

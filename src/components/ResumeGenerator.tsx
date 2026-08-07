@@ -31,6 +31,10 @@ import {
 } from "@/components/CvReviewLayout";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  DEFAULT_CV_SKILLS,
+  ensureSkillsSection,
+} from "@/lib/cv-template";
+import {
   exportHtmlPdf,
   exportHtmlWord,
   wrapPlainAsDoc,
@@ -59,6 +63,7 @@ function normalizeUrl(raw: string) {
 export function ResumeGenerator() {
   const {
     fullExperience,
+    profile,
     draftJd,
     setDraftJd,
     draftJobUrl,
@@ -159,11 +164,26 @@ export function ResumeGenerator() {
 
   useEffect(() => {
     if (tailoredResume?.includes("cv-sheet") && !resumeHtml) {
-      setResumeHtml(tailoredResume);
+      const fixed = ensureSkillsSection(tailoredResume, {
+        software: profile.skillsSoftware,
+        language: profile.skillsLanguage,
+        certificate: profile.skillsCertificate,
+      });
+      setResumeHtml(fixed);
+      setTailoredResume(stripReviewMarks(fixed));
       setCvEpoch((n) => n + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tailoredResume]);
+
+  function skillsOverrides() {
+    return {
+      software: profile.skillsSoftware?.trim() || DEFAULT_CV_SKILLS.software,
+      language: profile.skillsLanguage?.trim() || DEFAULT_CV_SKILLS.language,
+      certificate:
+        profile.skillsCertificate?.trim() || DEFAULT_CV_SKILLS.certificate,
+    };
+  }
 
   const jdOrUrl = draftJd.trim() || draftJobUrl.trim() || cachedParsedJd.trim();
   const canRewrite = Boolean(fullExperience.trim() && jdOrUrl);
@@ -460,7 +480,10 @@ export function ResumeGenerator() {
     const rationaleNext = normalizeCvRationale(
       data.rationale ?? data.rationaleList
     );
-    const rawHtml = String(data.tailoredResumeHtml || "").trim();
+    const rawHtml = ensureSkillsSection(
+      String(data.tailoredResumeHtml || "").trim(),
+      skillsOverrides()
+    );
     if (!rawHtml) {
       throw new Error("未返回有效 CV HTML");
     }

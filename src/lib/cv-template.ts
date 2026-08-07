@@ -285,6 +285,148 @@ export function buildFallbackCvHtml(): string {
   return buildEmptyCvHtml();
 }
 
+/** Default SKILLS lines — never leave the section empty */
+export const DEFAULT_CV_SKILLS = {
+  software:
+    "Microsoft Office, ArcGIS, Google Earth Engine, Photoshop, Adobe Illustrator, InDesign, Adobe Premiere Pro, ENVI-met, 3D Modeling Software",
+  language: "IELTS 7.0; CANTONESE (advanced); MANDARIN (native speaker)",
+  certificate: "BEAM Affiliate; CFA - ESG",
+} as const;
+
+export type CvSkillsTexts = {
+  software: string;
+  language: string;
+  certificate: string;
+};
+
+export function resolveCvSkills(
+  partial?: Partial<CvSkillsTexts> | null
+): CvSkillsTexts {
+  return {
+    software: partial?.software?.trim() || DEFAULT_CV_SKILLS.software,
+    language: partial?.language?.trim() || DEFAULT_CV_SKILLS.language,
+    certificate: partial?.certificate?.trim() || DEFAULT_CV_SKILLS.certificate,
+  };
+}
+
+/** Three-line SKILLS block: bold labels only */
+export function buildSkillsSectionHtml(
+  partial?: Partial<CvSkillsTexts> | null
+): string {
+  const s = resolveCvSkills(partial);
+  return `<section class="cv-section">
+      <h2 class="cv-section-title">SKILLS</h2>
+      <p class="cv-skills-line"><strong>Software:</strong> ${escapeCvText(s.software)}</p>
+      <p class="cv-skills-line"><strong>Language:</strong> ${escapeCvText(s.language)}</p>
+      <p class="cv-skills-line"><strong>Certificate:</strong> ${escapeCvText(s.certificate)}</p>
+    </section>`;
+}
+
+function escapeCvText(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function extractSkillsLineValue(html: string, label: string): string {
+  const re = new RegExp(
+    `<p[^>]*class="[^"]*cv-skills-line[^"]*"[^>]*>\\s*(?:<strong>)?\\s*${label}\\s*:\\s*(?:</strong>)?\\s*([\\s\\S]*?)</p>`,
+    "i"
+  );
+  const m = html.match(re);
+  if (!m) return "";
+  return m[1]
+    .replace(/<\/?strong>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Force a complete SKILLS section with Software / Language / Certificate.
+ * Preserves non-empty extracted values; fills defaults for any missing line.
+ */
+export function ensureSkillsSection(
+  html: string,
+  overrides?: Partial<CvSkillsTexts> | null
+): string {
+  if (!html.trim()) return html;
+  let out = html;
+
+  // Fold stray CERTIFICATES section into certificate text before rebuild
+  let certFromSection = "";
+  out = out.replace(
+    /<section[^>]*>\s*<h2[^>]*>\s*CERTIFICATES?\s*<\/h2>([\s\S]*?)<\/section>/gi,
+    (_m, body: string) => {
+      certFromSection = String(body)
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^Certificate\s*:\s*/i, "")
+        .trim();
+      return "";
+    }
+  );
+
+  const fromHtml: Partial<CvSkillsTexts> = {
+    software: extractSkillsLineValue(out, "Software"),
+    language: extractSkillsLineValue(out, "Language"),
+    certificate:
+      extractSkillsLineValue(out, "Certificate") ||
+      extractSkillsLineValue(out, "Certifications") ||
+      certFromSection,
+  };
+
+  const skills = resolveCvSkills({
+    software: overrides?.software || fromHtml.software,
+    language: overrides?.language || fromHtml.language,
+    certificate: overrides?.certificate || fromHtml.certificate,
+  });
+  const block = buildSkillsSectionHtml(skills);
+
+  if (
+    /<section[^>]*>\s*<h2[^>]*>\s*SKILLS\s*<\/h2>[\s\S]*?<\/section>/i.test(out)
+  ) {
+    out = out.replace(
+      /<section[^>]*>\s*<h2[^>]*>\s*SKILLS\s*<\/h2>[\s\S]*?<\/section>/i,
+      block
+    );
+  } else if (/<h2[^>]*>\s*SKILLS\s*<\/h2>/i.test(out)) {
+    // Bare h2 without wrapping section — replace from h2 through next section or end of body
+    out = out.replace(
+      /<h2[^>]*>\s*SKILLS\s*<\/h2>[\s\S]*?(?=<section\b|<h2\b|<\/div>\s*<\/div>)/i,
+      block
+    );
+  } else if (/<\/div>\s*<\/div>\s*$/i.test(out)) {
+    out = out.replace(/<\/div>\s*<\/div>\s*$/i, `${block}</div></div>`);
+  } else {
+    out = `${out}\n${block}`;
+  }
+
+  // Absolute guarantee
+  if (
+    !/<strong>\s*Software\s*:/i.test(out) ||
+    !/<strong>\s*Language\s*:/i.test(out) ||
+    !/<strong>\s*Certificate\s*:/i.test(out)
+  ) {
+    if (
+      /<section[^>]*>\s*<h2[^>]*>\s*SKILLS\s*<\/h2>[\s\S]*?<\/section>/i.test(
+        out
+      )
+    ) {
+      out = out.replace(
+        /<section[^>]*>\s*<h2[^>]*>\s*SKILLS\s*<\/h2>[\s\S]*?<\/section>/i,
+        block
+      );
+    } else {
+      out = `${out}\n${block}`;
+    }
+  }
+
+  return out;
+}
+
 /** Keep at most N <li> items per cv-bullets list inside a matching section */
 export function enforceBulletsInSection(
   html: string,

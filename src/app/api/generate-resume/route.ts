@@ -5,6 +5,7 @@ import {
   buildFallbackCvHtml,
   enforceOneProjectBullet,
   enforceTwoInternshipBullets,
+  ensureSkillsSection,
 } from "@/lib/cv-template";
 import { coursePoolPromptBlock } from "@/lib/course-pool";
 import {
@@ -260,90 +261,12 @@ function normalizeHtml(raw: string): string {
     "$1"
   );
   html = html.replace(/\s*list-style[^;:"']*:[^;"']*;?/gi, "");
-  // Fix common certificate label misspellings (incl. Ceitificate)
   html = html.replace(/\bCeitificates?\s*:/gi, "Certificate:");
   html = html.replace(/\bCe[rt]{1,2}ificates?\s*:/gi, "Certificate:");
   html = html.replace(/\bCertifications?\s*:/gi, "Certificate:");
-  // Normalize CERTIFICATES section → Certificate skills line (bold label only)
-  html = html.replace(
-    /<section[^>]*>\s*<h2[^>]*>\s*CERTIFICATES?\s*<\/h2>([\s\S]*?)<\/section>/gi,
-    (_m, body: string) => {
-      const line = String(body)
-        .replace(/<\/?p[^>]*>/gi, " ")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .replace(/^Certificate\s*:\s*/i, "")
-        .trim();
-      if (!line) return "";
-      return formatCertificateSkillsLine(line);
-    }
-  );
-  // Any Certificate skills line → bold label + normal-weight names
-  html = html.replace(
-    /<p class="cv-skills-line">[\s\S]*?Certificate\s*:[\s\S]*?<\/p>/gi,
-    (full) => {
-      const text = full
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .replace(/^[\s\S]*?Certificate\s*:/i, "")
-        .trim();
-      if (!text) {
-        return formatCertificateSkillsLine("BEAM Affiliate; CFA - ESG");
-      }
-      return formatCertificateSkillsLine(text);
-    }
-  );
-  // Strip accidental <strong> around Software/Language values (keep label bold)
-  html = html.replace(
-    /(<p class="cv-skills-line"><strong>(Software|Language):<\/strong>)\s*((?:<strong>[^<]+<\/strong>\s*[;，,]?\s*)+)(<\/p>)/gi,
-    (_m, open: string, _label: string, inner: string, close: string) => {
-      const plain = inner
-        .replace(/<\/?strong>/gi, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      return `${open} ${plain}${close}`;
-    }
-  );
-  // Bold-only certificate name lines (no Certificate label) → full format
-  html = html.replace(
-    /<p class="cv-skills-line">\s*(?:<strong>(?!Software:|Language:|Certificate:)([^<]+)<\/strong>\s*[;，,]?\s*)+<\/p>/gi,
-    (full) => {
-      if (/Certificate\s*:/i.test(full)) return full;
-      const names = [...full.matchAll(/<strong>([^<]+)<\/strong>/gi)]
-        .map((m) => m[1].trim())
-        .filter(Boolean);
-      if (!names.length) return full;
-      return formatCertificateSkillsLine(names.join("; "));
-    }
-  );
-  // Ensure SKILLS section always has a Certificate line
-  if (
-    /<h2[^>]*>\s*SKILLS\s*<\/h2>/i.test(html) &&
-    !/Certificate\s*:/i.test(html)
-  ) {
-    html = html.replace(
-      /(<h2[^>]*>\s*SKILLS\s*<\/h2>)([\s\S]*?)(<\/section>)/i,
-      (_m, title: string, body: string, close: string) =>
-        `${title}${body}${formatCertificateSkillsLine(
-          "BEAM Affiliate; CFA - ESG"
-        )}${close}`
-    );
-  }
+  // Force Software / Language / Certificate — never drop a line
+  html = ensureSkillsSection(html);
   html = enforceTwoInternshipBullets(html);
   html = enforceOneProjectBullet(html);
   return html;
-}
-
-/** Bold label only; certificate names in normal weight */
-function formatCertificateSkillsLine(rawNames: string): string {
-  const names = rawNames
-    .split(/[;，,]+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((s) => s.replace(/^Certificate\s*:\s*/i, "").trim())
-    .filter(Boolean);
-  const list = (names.length ? names : ["BEAM Affiliate", "CFA - ESG"]).join(
-    "; "
-  );
-  return `<p class="cv-skills-line"><strong>Certificate:</strong> ${list}</p>`;
 }
