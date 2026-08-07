@@ -11,6 +11,7 @@
     "agent:dev": "cd agent && uvicorn main:app --reload --port 8000"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.2",
     "cheerio": "^1.2.0",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.12.0",

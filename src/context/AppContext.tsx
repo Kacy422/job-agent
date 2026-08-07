@@ -6,13 +6,17 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { buildFullExperienceFromProfile } from "@/lib/experience";
 import {
-  buildFullExperienceFromProfile,
-  migrateToProfile,
-} from "@/lib/experience";
+  normalizeWorkspaceSnapshot,
+  readLocalWorkspaceCache,
+  writeLocalWorkspaceCache,
+  type WorkspaceSnapshot,
+} from "@/lib/workspace-state";
 import {
   DEFAULT_PROFILE_FROM_CV,
   EMPTY_CV_RATIONALE,
@@ -23,10 +27,10 @@ import {
   type Job,
   type JobApplication,
   type ProfileData,
-  type TrackStatus,
 } from "@/types";
 
 type TabId = "board" | "profile" | "resume" | "apply";
+type SyncStatus = "idle" | "loading" | "saving" | "synced" | "offline" | "error";
 
 interface AppState {
   tab: TabId;
@@ -46,8 +50,9 @@ interface AppState {
   selectApp: (id: string | null) => void;
   selectedApp: JobApplication | null;
   upsertApplication: (app: JobApplication) => void;
-  /** 始终追加新记录，不覆盖已有 id */
-  appendApplication: (app: Omit<JobApplication, "id"> & { id?: string }) => string;
+  appendApplication: (
+    app: Omit<JobApplication, "id"> & { id?: string }
+  ) => string;
   updateApplication: (id: string, patch: Partial<JobApplication>) => void;
   removeApplication: (id: string) => void;
   draftJd: string;
@@ -60,12 +65,10 @@ interface AppState {
   setDraftTitle: (v: string) => void;
   tailoredResume: string;
   setTailoredResume: (v: string) => void;
-  /** 生成材料时绑定的 JD/URL 指纹；变更则清空工作区 */
   generationSourceKey: string | null;
   setGenerationSourceKey: (k: string | null) => void;
   rationale: CvRationale;
   setRationale: (v: CvRationale) => void;
-  /** @deprecated 兼容旧引用 */
   rationaleList: string[];
   setRationaleList: (v: string[]) => void;
   coverLetter: string;
@@ -87,10 +90,12 @@ interface AppState {
   updateJob: (id: string, patch: Partial<Job>) => void;
   addJob: (job: Job) => void;
   removeJob: (id: string) => void;
+  syncStatus: SyncStatus;
+  syncError: string;
+  hydrated: boolean;
 }
 
 const Ctx = createContext<AppState | null>(null);
-const STORAGE_KEY = "job-agent-state-v5";
 
 function jobToApplication(j: Job): JobApplication {
   return {
@@ -107,6 +112,39 @@ function jobToApplication(j: Job): JobApplication {
     createdAt: j.createdAt,
     updatedAt: j.updatedAt || j.createdAt,
   };
+}
+
+function applySnapshot(
+  snap: WorkspaceSnapshot,
+  setters: {
+    setProfile: (p: ProfileData) => void;
+    setApplications: (a: JobApplication[]) => void;
+    setSelectedAppId: (id: string | null) => void;
+    setDraftJd: (v: string) => void;
+    setDraftJobUrl: (v: string) => void;
+    setDraftCompany: (v: string) => void;
+    setDraftTitle: (v: string) => void;
+    setTailoredResume: (v: string) => void;
+    setGenerationSourceKey: (k: string | null) => void;
+    setRationale: (v: CvRationale) => void;
+    setCoverLetter: (v: string) => void;
+    setInterviewQA: (v: JobApplication["interviewQA"]) => void;
+    setApplyPack: (v: ApplyPack | null) => void;
+  }
+) {
+  setters.setProfile(snap.profile);
+  setters.setApplications(snap.applications);
+  setters.setSelectedAppId(snap.selectedAppId);
+  setters.setDraftJd(snap.draftJd);
+  setters.setDraftJobUrl(snap.draftJobUrl);
+  setters.setDraftCompany(snap.draftCompany);
+  setters.setDraftTitle(snap.draftTitle);
+  setters.setTailoredResume(snap.tailoredResume);
+  setters.setGenerationSourceKey(snap.generationSourceKey);
+  setters.setRationale(snap.rationale);
+  setters.setCoverLetter(snap.coverLetter);
+  setters.setInterviewQA(snap.interviewQA || []);
+  setters.setApplyPack(snap.applyPack);
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -134,99 +172,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [applyPack, setApplyPack] = useState<ApplyPack | null>(null);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("loading");
+  const [syncError, setSyncError] = useState("");
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextSaveRef = useRef(true);
 
   const fullExperience = useMemo(
     () => buildFullExperienceFromProfile(profile),
     [profile]
   );
 
-  useEffect(() => {
-    try {
-      const raw =
-        localStorage.getItem(STORAGE_KEY) ||
-        localStorage.getItem("job-agent-state-v4") ||
-        localStorage.getItem("job-agent-state-v3") ||
-        localStorage.getItem("job-agent-state-v2") ||
-        localStorage.getItem("job-agent-state-v1");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setProfile(
-          migrateToProfile(
-            parsed.masterCv || "",
-            parsed.extraNotes || "",
-            parsed.profile
-          )
-        );
-        if (Array.isArray(parsed.applications)) {
-          setApplications(parsed.applications);
-        } else if (Array.isArray(parsed.jobs)) {
-          setApplications(
-            (parsed.jobs as Job[]).map((j) =>
-              jobToApplication({
-                ...j,
-                pipelineStatus: j.pipelineStatus || "matched",
-                status: j.status || "wishlist",
-                url: j.url || "",
-                location: j.location || "",
-                salary: j.salary || "",
-                source: j.source || "",
-                tags: j.tags || [],
-              })
-            )
-          );
-        }
-        if (parsed.selectedAppId) setSelectedAppId(parsed.selectedAppId);
-        if (typeof parsed.draftJd === "string") setDraftJd(parsed.draftJd);
-        if (typeof parsed.draftJobUrl === "string")
-          setDraftJobUrl(parsed.draftJobUrl);
-        if (typeof parsed.draftCompany === "string")
-          setDraftCompany(parsed.draftCompany);
-        if (typeof parsed.draftTitle === "string")
-          setDraftTitle(parsed.draftTitle);
-        if (parsed.tailoredResume) setTailoredResume(parsed.tailoredResume);
-        if (typeof parsed.generationSourceKey === "string")
-          setGenerationSourceKey(parsed.generationSourceKey);
-        if (parsed.rationale || parsed.rationaleList) {
-          setRationale(
-            normalizeCvRationale(parsed.rationale ?? parsed.rationaleList)
-          );
-        }
-        if (typeof parsed.coverLetter === "string")
-          setCoverLetter(parsed.coverLetter);
-        if (Array.isArray(parsed.interviewQA))
-          setInterviewQA(parsed.interviewQA);
-        if (parsed.applyPack) setApplyPack(parsed.applyPack);
-      } else {
-        setProfile(structuredClone(DEFAULT_PROFILE_FROM_CV));
-      }
-    } catch {
-      setProfile(structuredClone(DEFAULT_PROFILE_FROM_CV));
-    }
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        profile,
-        applications,
-        selectedAppId,
-        draftJd,
-        draftJobUrl,
-        draftCompany,
-        draftTitle,
-        tailoredResume,
-        generationSourceKey,
-        rationale,
-        coverLetter,
-        interviewQA,
-        applyPack,
-      })
-    );
+  const buildSnapshot = useCallback((): WorkspaceSnapshot => {
+    return normalizeWorkspaceSnapshot({
+      profile,
+      applications,
+      selectedAppId,
+      draftJd,
+      draftJobUrl,
+      draftCompany,
+      draftTitle,
+      tailoredResume,
+      generationSourceKey,
+      rationale,
+      coverLetter,
+      interviewQA,
+      applyPack,
+      updatedAt: new Date().toISOString(),
+    });
   }, [
-    hydrated,
     profile,
     applications,
     selectedAppId,
@@ -241,6 +214,137 @@ export function AppProvider({ children }: { children: ReactNode }) {
     interviewQA,
     applyPack,
   ]);
+
+  /** Load: Redis → else localStorage (migrate up) → else defaults */
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrate() {
+      setSyncStatus("loading");
+      const setters = {
+        setProfile,
+        setApplications,
+        setSelectedAppId,
+        setDraftJd,
+        setDraftJobUrl,
+        setDraftCompany,
+        setDraftTitle,
+        setTailoredResume,
+        setGenerationSourceKey,
+        setRationale,
+        setCoverLetter,
+        setInterviewQA,
+        setApplyPack,
+      };
+
+      const local = readLocalWorkspaceCache();
+
+      try {
+        const res = await fetch("/api/workspace", { cache: "no-store" });
+        const json = await res.json().catch(() => ({}));
+        if (cancelled) return;
+
+        if (res.ok && json.data) {
+          const snap = normalizeWorkspaceSnapshot(json.data);
+          applySnapshot(snap, setters);
+          writeLocalWorkspaceCache(snap);
+          setSyncStatus("synced");
+          setSyncError("");
+        } else if (res.status === 503 || json.configured === false) {
+          if (local) applySnapshot(local, setters);
+          setSyncStatus("offline");
+          setSyncError(
+            String(json.error || "Redis 未配置，当前仅使用本机缓存")
+          );
+        } else if (json.empty || !json.data) {
+          if (local) {
+            applySnapshot(local, setters);
+            try {
+              const put = await fetch("/api/workspace", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(local),
+              });
+              if (put.ok) {
+                setSyncStatus("synced");
+                setSyncError("");
+              } else {
+                setSyncStatus("error");
+                setSyncError("本地数据迁移到 Redis 失败");
+              }
+            } catch {
+              setSyncStatus("error");
+              setSyncError("本地数据迁移到 Redis 失败");
+            }
+          } else {
+            setProfile(structuredClone(DEFAULT_PROFILE_FROM_CV));
+            setSyncStatus("synced");
+          }
+        } else {
+          if (local) applySnapshot(local, setters);
+          setSyncStatus("error");
+          setSyncError(String(json.error || "读取云端数据失败"));
+        }
+      } catch {
+        if (cancelled) return;
+        if (local) applySnapshot(local, setters);
+        setSyncStatus("offline");
+        setSyncError("无法连接云端，已加载本机缓存");
+      }
+
+      if (!cancelled) {
+        skipNextSaveRef.current = true;
+        setHydrated(true);
+      }
+    }
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Persist: localStorage immediately + debounced Redis */
+  useEffect(() => {
+    if (!hydrated) return;
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
+
+    const snapshot = buildSnapshot();
+    writeLocalWorkspaceCache(snapshot);
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      setSyncStatus((s) => (s === "offline" ? s : "saving"));
+      try {
+        const res = await fetch("/api/workspace", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshot),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json.ok) {
+          setSyncStatus("synced");
+          setSyncError("");
+        } else if (res.status === 503) {
+          setSyncStatus("offline");
+          setSyncError(String(json.error || "Redis 未配置"));
+        } else {
+          setSyncStatus("error");
+          setSyncError(String(json.error || "保存到 Redis 失败"));
+        }
+      } catch {
+        setSyncStatus("error");
+        setSyncError("保存到云端失败（本机缓存已更新）");
+      }
+    }, 600);
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [hydrated, buildSnapshot]);
 
   const updateProfileField = useCallback(
     (key: import("@/types").ProfileScalarKey, value: string) => {
@@ -258,7 +362,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const idx = prev.findIndex((a) => a.id === app.id);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], ...app, updatedAt: new Date().toISOString() };
+        next[idx] = {
+          ...next[idx],
+          ...app,
+          updatedAt: new Date().toISOString(),
+        };
         return next;
       }
       return [app, ...prev];
@@ -266,7 +374,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSelectedAppId(app.id);
   }, []);
 
-  /** 同步到求职总结：始终 Append 新记录，禁止覆盖 */
   const appendApplication = useCallback(
     (app: Omit<JobApplication, "id"> & { id?: string }) => {
       const id = crypto.randomUUID();
@@ -321,7 +428,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const masterCv = fullExperience;
   const setMasterCv = useCallback((_v: string) => {
-    /* no-op: structured profile is source of truth */
+    /* structured profile is source of truth */
   }, []);
   const extraNotes = profile.quickNotes;
   const setExtraNotes = useCallback((v: string) => {
@@ -454,6 +561,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateJob,
       addJob,
       removeJob,
+      syncStatus,
+      syncError,
+      hydrated,
     }),
     [
       tab,
@@ -490,6 +600,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateJob,
       addJob,
       removeJob,
+      syncStatus,
+      syncError,
+      hydrated,
     ]
   );
 
@@ -502,4 +615,4 @@ export function useApp() {
   return ctx;
 }
 
-export type { TabId };
+export type { TabId, SyncStatus };

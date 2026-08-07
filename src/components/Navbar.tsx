@@ -17,10 +17,32 @@ const TABS: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
 ];
 
 export function Navbar() {
-  const { tab, setTab, applications } = useApp();
+  const { tab, setTab, applications, syncStatus, syncError } = useApp();
   const activeCount = applications.filter(
     (a) => a.trackStatus !== "applied"
   ).length;
+
+  const syncLabel =
+    syncStatus === "loading"
+      ? "云端加载中…"
+      : syncStatus === "saving"
+        ? "同步中…"
+        : syncStatus === "synced"
+          ? "已同步云端"
+          : syncStatus === "offline"
+            ? "仅本机缓存"
+            : syncStatus === "error"
+              ? "同步失败"
+              : "";
+
+  const syncClass =
+    syncStatus === "synced"
+      ? "text-emerald-600"
+      : syncStatus === "error"
+        ? "text-rose-600"
+        : syncStatus === "offline"
+          ? "text-amber-600"
+          : "text-slate-400";
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/50 bg-white/60 shadow-glass backdrop-blur-xl">
@@ -39,6 +61,11 @@ export function Navbar() {
                 ? ` · ${applications.length} 个岗位`
                 : ""}
               {activeCount > 0 ? ` · ${activeCount} 进行中` : ""}
+              {syncLabel ? (
+                <span className={`ml-2 ${syncClass}`} title={syncError || syncLabel}>
+                  · {syncLabel}
+                </span>
+              ) : null}
             </p>
           </div>
         </div>
