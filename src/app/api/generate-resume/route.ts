@@ -4,6 +4,7 @@ import {
   CV_HTML_SCHEMA_HINT,
   buildFallbackCvHtml,
 } from "@/lib/cv-template";
+import { coursePoolPromptBlock } from "@/lib/course-pool";
 import {
   formatRationaleLine,
   normalizeCvRationale,
@@ -82,8 +83,11 @@ Output STRICT JSON only (no markdown fences):
 
 === HTML layout ===
 ${CV_HTML_SCHEMA_HINT}
-Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS.
+Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS, then CERTIFICATES.
 Internship headers MUST be "Company, City" with role on the next line (cv-role).
+CERTIFICATES must be its own <h2 class="cv-section-title">CERTIFICATES</h2> (same bold style as EDUCATION).
+
+${coursePoolPromptBlock()}
 
 === rationale (Simplified Chinese only) ===
 - added【增加】: 1–3 items {text, reason} — new JD keywords / metrics / stronger verbs you emphasised.

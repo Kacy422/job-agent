@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { buildFullExperienceFromProfile } from "@/lib/experience";
+import { buildFullExperienceFromProfile, syncEducationGpa } from "@/lib/experience";
 import {
   normalizeWorkspaceSnapshot,
   readLocalWorkspaceCache,
@@ -403,7 +403,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateProfileField = useCallback(
     (key: import("@/types").ProfileScalarKey, value: string) => {
-      setProfile((prev) => ({ ...prev, [key]: value }));
+      setProfile((prev) => {
+        const next = { ...prev, [key]: value };
+        if (key === "gpaScore" || key === "gpaScale" || key === "gpaPercentage") {
+          return syncEducationGpa(next);
+        }
+        return next;
+      });
     },
     []
   );
@@ -495,15 +501,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       applications.map(
         (a): Job => ({
           id: a.id,
-          url: a.applyUrl || "",
-          applyUrl: a.applyUrl,
+          url: a.applyUrl || a.jobUrl || "",
+          applyUrl: a.applyUrl || a.jobUrl || "",
           title: a.title,
           company: a.company,
           location: "",
           salary: "",
           source: "tracker",
           tags: [],
-          description: a.jd,
+          description: a.jdText || a.jd,
           pipelineStatus:
             a.trackStatus === "interview"
               ? "interview"

@@ -82,7 +82,15 @@ export function normalizeWorkspaceSnapshot(raw: unknown): WorkspaceSnapshot {
   );
 
   if (Array.isArray(parsed.applications)) {
-    base.applications = parsed.applications as JobApplication[];
+    base.applications = (parsed.applications as JobApplication[]).map(
+      (a) => ({
+        ...a,
+        jd: String(a.jdText || a.jd || ""),
+        jdText: String(a.jdText || a.jd || ""),
+        applyUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
+        jobUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
+      })
+    );
   } else if (Array.isArray(parsed.jobs)) {
     base.applications = (parsed.jobs as Job[]).map((j) =>
       jobToApplication({

@@ -16,6 +16,7 @@ import {
   Check,
   RefreshCw,
   MessageSquareText,
+  SquareKanban,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { EditableCvPreview } from "@/components/EditableCvPreview";
@@ -608,6 +609,54 @@ export function ResumeGenerator() {
     }
   }
 
+  function resolveTrackerPayload(): {
+    company: string;
+    title: string;
+    jdText: string;
+    jobUrl: string;
+  } {
+    const jdText = (draftJd.trim() || cachedParsedJd.trim()).trim();
+    const jobUrl = draftJobUrl.trim()
+      ? normalizeUrl(draftJobUrl.trim())
+      : "";
+    return {
+      company: draftCompany.trim() || "未命名公司",
+      title: draftTitle.trim() || "未命名岗位",
+      jdText,
+      jobUrl,
+    };
+  }
+
+  /** 仅凭公司/岗位/JD/链接即可导入看板（无需已生成 CV） */
+  function importJobToTracker() {
+    const { company, title, jdText, jobUrl } = resolveTrackerPayload();
+    if (
+      company === "未命名公司" &&
+      title === "未命名岗位" &&
+      !jdText &&
+      !jobUrl
+    ) {
+      setError("请先填写公司或岗位名称，或粘贴 JD / 岗位链接后再导入");
+      return;
+    }
+    const now = new Date().toISOString();
+    const app: Omit<JobApplication, "id"> = {
+      company,
+      title,
+      jd: jdText,
+      jdText,
+      applyUrl: jobUrl || undefined,
+      jobUrl: jobUrl || undefined,
+      trackStatus: "preparing",
+      createdAt: now,
+      updatedAt: now,
+    };
+    appendApplication(app);
+    setError("");
+    setSavedHint(`已导入求职进度：${app.company} · ${app.title}`);
+    setTimeout(() => setSavedHint(""), 2500);
+  }
+
   function saveToTracker() {
     const liveHtml =
       exportRef.current?.innerHTML?.trim() ||
@@ -615,15 +664,18 @@ export function ResumeGenerator() {
       tailoredResume ||
       "";
     if (!liveHtml && !coverLetter && !(interviewQA && interviewQA.length)) {
-      setError("暂无材料可保存，请先生成 CV / Cover Letter / 面试题");
+      setError("暂无材料可保存，请先生成 CV / Cover Letter / 面试题；或使用「导入求职进度」仅归档岗位");
       return;
     }
+    const { company, title, jdText, jobUrl } = resolveTrackerPayload();
     const now = new Date().toISOString();
     const app: Omit<JobApplication, "id"> = {
-      company: draftCompany.trim() || "未命名公司",
-      title: draftTitle.trim() || "未命名岗位",
-      jd: draftJd || cachedParsedJd,
-      applyUrl: draftJobUrl || undefined,
+      company,
+      title,
+      jd: jdText,
+      jdText,
+      applyUrl: jobUrl || undefined,
+      jobUrl: jobUrl || undefined,
       cvHtml: liveHtml ? stripReviewMarks(liveHtml) : undefined,
       coverLetter: coverLetter || undefined,
       rationale: isCvRationaleEmpty(rationale) ? undefined : rationale,
@@ -633,6 +685,7 @@ export function ResumeGenerator() {
       updatedAt: now,
     };
     appendApplication(app);
+    setError("");
     setSavedHint(`已追加到求职进度：${app.company} · ${app.title}`);
     setTimeout(() => setSavedHint(""), 2500);
   }
@@ -703,12 +756,12 @@ export function ResumeGenerator() {
   }
 
   return (
-    <section className="mx-auto max-w-[1400px] px-4 py-8 sm:px-6">
+    <section className="mx-auto max-w-[1600px] px-4 py-8 sm:px-6">
       <PageHeader
         emoji="📝"
         step="步骤 2 · 专属简历"
         title="一键改写 CV · 按需生成其他材料"
-        description="路径 A 粘贴链接（解析后 JD 自动填入）/ 路径 B 直接粘贴 JD。生成后左侧 CV、右侧 Word 式批注。"
+        description="路径 A 粘贴链接（解析后 JD 自动填入）/ 路径 B 直接粘贴 JD。左侧窄栏 JD，中间 A4 预览。"
         accent="teal"
         actions={
           <>
@@ -722,11 +775,19 @@ export function ResumeGenerator() {
             </button>
             <button
               type="button"
+              onClick={importJobToTracker}
+              className="soft-btn rounded-2xl border border-amber-200/60 bg-amber-50/80 px-4 py-2.5 text-amber-950 shadow-glass backdrop-blur-md hover:bg-amber-50"
+            >
+              <SquareKanban className="h-4 w-4" />
+              导入求职进度
+            </button>
+            <button
+              type="button"
               onClick={saveToTracker}
               className="soft-btn rounded-2xl border border-teal-200/60 bg-teal-50/80 px-4 py-2.5 text-teal-900 shadow-glass backdrop-blur-md hover:bg-teal-50"
             >
               <Save className="h-4 w-4" />
-              追加到求职进度
+              保存 CV 到求职进度
             </button>
           </>
         }
@@ -755,13 +816,13 @@ export function ResumeGenerator() {
         </p>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.3fr)]">
-        <div className="space-y-4">
-          <div className="glass-panel p-5">
-            <h3 className="mb-3 font-display text-xl text-slate-900">
+      <div className="grid gap-5 xl:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
+        <div className="min-w-0 max-w-[300px] space-y-4 xl:max-w-none">
+          <div className="glass-panel p-4">
+            <h3 className="mb-3 font-display text-lg text-slate-900">
               目标岗位
             </h3>
-            <div className="mb-3 grid gap-2 sm:grid-cols-2">
+            <div className="mb-3 grid gap-2">
               <input
                 value={draftCompany}
                 onChange={(e) => setDraftCompany(e.target.value)}
@@ -845,7 +906,7 @@ export function ResumeGenerator() {
               value={draftJd}
               onChange={(e) => onJdChange(e.target.value)}
               placeholder="粘贴完整 JD，或由上方链接解析自动填入（手动编辑将清空链接）…"
-              className="soft-textarea mb-3 h-44 w-full p-3"
+              className="soft-textarea mb-3 h-36 w-full p-2.5 text-xs"
               style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
             />
             {parseHint && (
@@ -861,6 +922,17 @@ export function ResumeGenerator() {
                 {parseHint}
               </p>
             )}
+            <button
+              type="button"
+              onClick={importJobToTracker}
+              className="soft-btn mb-2 w-full rounded-2xl border border-amber-200/70 bg-amber-50/90 py-2.5 text-sm font-medium text-amber-950 shadow-glass"
+            >
+              <SquareKanban className="h-4 w-4" />
+              导入求职进度
+            </button>
+            <p className="mb-3 text-[10px] leading-relaxed text-slate-400">
+              无需生成 CV：只要有公司 / 岗位 / JD / 链接即可归档到看板
+            </p>
             <button
               type="button"
               onClick={rewriteCv}
@@ -980,7 +1052,7 @@ export function ResumeGenerator() {
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {hasCv ? (
             <CvReviewLayout
               highlights={cvHighlights}

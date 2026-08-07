@@ -12,11 +12,15 @@ import {
   X,
   Download,
   Eye,
+  Link2,
+  ScrollText,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { PageHeader } from "@/components/PageHeader";
 import {
   TRACK_LABEL,
+  appJdText,
+  appJobUrl,
   normalizeCvRationale,
   type JobApplication,
   type TrackStatus,
@@ -43,7 +47,7 @@ const STATUS_STYLE: Record<TrackStatus, string> = {
   interview: "bg-violet-50 text-violet-800 border-violet-200",
 };
 
-type PreviewKind = "cv" | "cover" | "interview";
+type PreviewKind = "cv" | "cover" | "interview" | "jd";
 
 export function ApplicationsTracker() {
   const {
@@ -72,8 +76,8 @@ export function ApplicationsTracker() {
     const app = applications.find((a) => a.id === id);
     if (!app) return;
     selectApp(id);
-    const jd = app.jd || "";
-    const url = app.applyUrl || "";
+    const jd = appJdText(app);
+    const url = appJobUrl(app);
     setDraftJd(jd);
     setDraftJobUrl(url);
     setDraftCompany(app.company || "");
@@ -140,7 +144,8 @@ export function ApplicationsTracker() {
             求职进度还是空的
           </h3>
           <p className="mx-auto mt-2 max-w-md text-sm tracking-wide text-slate-600">
-            在「专属简历」生成材料后，可一键追加到此处归档。
+            在「专属简历」粘贴 JD / 链接后即可「导入求职进度」，或生成材料后「保存
+            CV」。
           </p>
           <button
             type="button"
@@ -188,6 +193,8 @@ export function ApplicationsTracker() {
           <tbody>
             {applications.map((app) => {
               const qaCount = app.interviewQA?.length || 0;
+              const jdFull = appJdText(app);
+              const urlFull = appJobUrl(app);
               return (
                 <tr
                   key={app.id}
@@ -205,6 +212,20 @@ export function ApplicationsTracker() {
                           {app.title || "未命名岗位"}
                         </span>
                       </span>
+                      <button
+                        type="button"
+                        disabled={!jdFull && !urlFull}
+                        onClick={() => setPreview({ app, kind: "jd" })}
+                        className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] ${
+                          jdFull || urlFull
+                            ? "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                            : "cursor-not-allowed text-slate-300"
+                        }`}
+                        title="查看完整 JD 与链接"
+                      >
+                        <ScrollText className="h-3 w-3" />
+                        JD / 链接
+                      </button>
                     </div>
                   </td>
                   <td className="px-4 py-3.5">
@@ -325,29 +346,35 @@ export function ApplicationsTracker() {
                     ? "CV 预览"
                     : preview.kind === "cover"
                       ? "Cover Letter 预览"
-                      : "面试问题"}
+                      : preview.kind === "jd"
+                        ? "岗位 JD / 链接"
+                        : "面试问题"}
                 </h3>
                 <p className="text-xs tracking-wide text-slate-500">
                   {preview.app.company} · {preview.app.title}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={exportPreviewPdf}
-                  className="soft-btn rounded-xl border border-slate-200/60 bg-white/80 px-3 py-1.5 text-xs text-slate-800 shadow-glass"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  导出 PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={exportPreviewWord}
-                  className="soft-btn rounded-xl border border-indigo-200/60 bg-indigo-50/80 px-3 py-1.5 text-xs text-indigo-900 shadow-glass"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  导出 Word
-                </button>
+                {preview.kind !== "jd" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={exportPreviewPdf}
+                      className="soft-btn rounded-xl border border-slate-200/60 bg-white/80 px-3 py-1.5 text-xs text-slate-800 shadow-glass"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      导出 PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={exportPreviewWord}
+                      className="soft-btn rounded-xl border border-indigo-200/60 bg-indigo-50/80 px-3 py-1.5 text-xs text-indigo-900 shadow-glass"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      导出 Word
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => setPreview(null)}
@@ -358,6 +385,26 @@ export function ApplicationsTracker() {
               </div>
             </div>
 
+            {preview.kind === "jd" && (
+              <div className="space-y-3">
+                {appJobUrl(preview.app) ? (
+                  <a
+                    href={appJobUrl(preview.app)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex max-w-full items-center gap-1.5 break-all text-sm text-teal-700 underline"
+                  >
+                    <Link2 className="h-3.5 w-3.5 shrink-0" />
+                    {appJobUrl(preview.app)}
+                  </a>
+                ) : (
+                  <p className="text-xs text-slate-400">未保存岗位链接</p>
+                )}
+                <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-2xl border border-slate-200/40 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-800">
+                  {appJdText(preview.app) || "（暂无 JD 文本）"}
+                </pre>
+              </div>
+            )}
             {preview.kind === "cv" && (
               <>
                 <style dangerouslySetInnerHTML={{ __html: CV_SHEET_CSS }} />

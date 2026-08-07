@@ -67,6 +67,7 @@ export const CV_SHEET_CSS = `
 .cv-section-title {
   font-size: 16px;
   font-weight: 700;
+  font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 0.45px;
   border-bottom: 2px solid #000;
@@ -212,6 +213,7 @@ export function buildEmptyCvHtml(): string {
           <div class="cv-right">Sept 2025 - Nov 2026</div>
         </div>
         <p class="cv-role">MSc in Sustainable Environmental Design</p>
+        <p class="cv-sub">GPA: 3.8 / 4.0</p>
         <p class="cv-sub">Major courses: Green Building Assessment and Climate Responsive Design, Environmental Policy and Management of Megacities, Bioclimatic Architectural Design</p>
       </div>
       <div class="cv-entry">
@@ -276,7 +278,10 @@ export function buildEmptyCvHtml(): string {
       <h2 class="cv-section-title">SKILLS</h2>
       <p class="cv-skills-line"><strong>Software:</strong> Microsoft Office, Arcgis, Google Earth Engine, Photoshop, Adobe Illustrator, InDesign, Adobe Premiere Pro, ENVI-met, 3D Modeling Software</p>
       <p class="cv-skills-line"><strong>Language:</strong> IELTS 7.0; CANTONESE (advanced); MANDARIN (native speaker)</p>
-      <p class="cv-skills-line"><strong>Certificate:</strong> BEAM Affiliate, CFA - ESG</p>
+    </section>
+    <section class="cv-section">
+      <h2 class="cv-section-title">CERTIFICATES</h2>
+      <p class="cv-skills-line">BEAM Affiliate, CFA - ESG</p>
     </section>
   </div>
 </div>`;
@@ -290,7 +295,7 @@ export const CV_HTML_SCHEMA_HINT = `Return HTML rooted in <div class="cv-sheet">
 
 === Structure ===
 header.cv-header (p.cv-name + p.cv-contact) + div.cv-body with sections:
-EDUCATION → INTERNSHIP EXPERIENCE → (SCHOOL PROJECTS & LEADERSHIP OR PROJECTS & OTHER EXPERIENCES) → SKILLS
+EDUCATION → INTERNSHIP EXPERIENCE → (SCHOOL PROJECTS & LEADERSHIP OR PROJECTS & OTHER EXPERIENCES) → SKILLS → CERTIFICATES
 
 === Entry pattern (EVERY internship / project / leadership item) ===
 Wrap each item in <div class="cv-entry">:
@@ -324,7 +329,14 @@ Pick whichever fits the content better.
 - then bullets for outcomes
 
 === Education ===
-- cv-left = school name; cv-right = dates; cv-role = degree; optional <p class="cv-sub"> for Major courses
+- cv-left = school name; cv-right = dates; cv-role = degree
+- For HKU MSc: include <p class="cv-sub">GPA: X.X / Y.Y</p> using the GPA from the experience library (do not invent)
+- Then <p class="cv-sub">Major courses: …</p> selected from the COURSE POOL (see system prompt)
+
+=== SKILLS vs CERTIFICATES ===
+- SKILLS section: Software + Language lines only (cv-skills-line)
+- CERTIFICATES section: separate <h2 class="cv-section-title">CERTIFICATES</h2> (font-bold via class) with certificate list as cv-skills-line
+- Do NOT nest certificates under SKILLS as "Certificate:"
 
 === Rules ===
 - Classes ONLY: cv-section, cv-section-title, cv-entry, cv-row, cv-left, cv-role, cv-right, cv-bullets, cv-skills-line, cv-sub

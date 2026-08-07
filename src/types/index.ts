@@ -94,8 +94,14 @@ export interface JobApplication {
   id: string;
   company: string;
   title: string;
+  /** Full JD text (jd_text) */
   jd: string;
+  /** Explicit alias of jd for tracker / export clarity */
+  jdText?: string;
+  /** Job posting URL (job_url) */
   applyUrl?: string;
+  /** Explicit alias of applyUrl */
+  jobUrl?: string;
   cvHtml?: string;
   coverLetter?: string;
   rationale?: CvRationale;
@@ -105,6 +111,18 @@ export interface JobApplication {
   trackStatus: TrackStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Resolve full JD text from an application record */
+export function appJdText(app: Pick<JobApplication, "jd" | "jdText">): string {
+  return String(app.jdText || app.jd || "").trim();
+}
+
+/** Resolve job URL from an application record */
+export function appJobUrl(
+  app: Pick<JobApplication, "applyUrl" | "jobUrl">
+): string {
+  return String(app.jobUrl || app.applyUrl || "").trim();
 }
 
 /** 画像条目（教育/实习/项目） */
@@ -202,7 +220,7 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
       id: eid("edu"),
       headline: "The University of Hong Kong",
       detail:
-        "MSc in Sustainable Environmental Design\nMajor courses: Green Building Assessment and Climate Responsive Design, Environmental Policy and Management of Megacities, Bioclimatic Architectural Design",
+        "MSc in Sustainable Environmental Design\nGPA: 3.8 / 4.0\nMajor courses: Green Building Assessment and Climate Responsive Design, Environmental Policy and Management of Megacities, Bioclimatic Architectural Design",
       period: "Sept 2025 - Nov 2026",
       bullets: [],
     },

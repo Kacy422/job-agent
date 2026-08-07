@@ -42,6 +42,15 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
     profile.projects
   );
   if (edu) parts.push(edu);
+
+  const gpaScore = profile.gpaScore?.trim();
+  const gpaScale = profile.gpaScale?.trim() || "4.0";
+  if (gpaScore) {
+    parts.push(
+      `## GPA (use on HKU MSc education line)\nGPA: ${gpaScore} / ${gpaScale}`
+    );
+  }
+
   if (intern) parts.push(intern);
   if (proj) parts.push(proj);
 
@@ -50,9 +59,13 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
     skills.push(`Software: ${profile.skillsSoftware.trim()}`);
   if (profile.skillsLanguage.trim())
     skills.push(`Language: ${profile.skillsLanguage.trim()}`);
-  if (profile.skillsCertificate.trim())
-    skills.push(`Certificate: ${profile.skillsCertificate.trim()}`);
-  if (skills.length) parts.push(`## Skills & Certificates\n${skills.join("\n")}`);
+  if (skills.length) parts.push(`## Skills\n${skills.join("\n")}`);
+
+  if (profile.skillsCertificate.trim()) {
+    parts.push(
+      `## Certificates (CERTIFICATES section title — bold)\n${profile.skillsCertificate.trim()}`
+    );
+  }
 
   if (profile.quickNotes.trim()) {
     parts.push(`## Quick Notes\n${profile.quickNotes.trim()}`);
@@ -171,6 +184,35 @@ export function buildFullExperience(masterCv: string, extraNotes: string): strin
   if (!notes) return master;
   if (!master) return notes;
   return `${master}\n\n## Quick Notes\n${notes}`;
+}
+
+/** Keep HKU education detail GPA line in sync with profile.gpaScore / gpaScale */
+export function syncEducationGpa(profile: ProfileData): ProfileData {
+  const score = profile.gpaScore?.trim();
+  const scale = (profile.gpaScale?.trim() || "4.0").trim();
+  if (!score) return profile;
+  const gpaLine = `GPA: ${score} / ${scale}`;
+  let anyChanged = false;
+  const education = profile.education.map((e) => {
+    if (!/University of Hong Kong|HKU/i.test(e.headline)) return e;
+    let detail = e.detail || "";
+    if (/GPA\s*:/i.test(detail)) {
+      const next = detail.replace(/GPA\s*:[^\n]*/i, gpaLine);
+      if (next === detail) return e;
+      anyChanged = true;
+      return { ...e, detail: next };
+    }
+    const lines = detail.split("\n");
+    if (lines.length) {
+      lines.splice(1, 0, gpaLine);
+      detail = lines.join("\n");
+    } else {
+      detail = gpaLine;
+    }
+    anyChanged = true;
+    return { ...e, detail };
+  });
+  return anyChanged ? { ...profile, education } : profile;
 }
 
 export { EMPTY_PROFILE };
