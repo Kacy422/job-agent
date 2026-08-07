@@ -1,0 +1,142 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-a: #f1f5f9;
+  --bg-b: #f8fafc;
+  --bg-c: #e0f2fe;
+  --glass-border: rgba(255, 255, 255, 0.65);
+  --soft-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
+  --soft-shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.06);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  color: #0f172a;
+  background:
+    radial-gradient(1100px 520px at 8% -8%, rgba(224, 242, 254, 0.7), transparent 55%),
+    radial-gradient(900px 480px at 92% 0%, rgba(241, 245, 249, 0.9), transparent 50%),
+    linear-gradient(135deg, #f8fafc 0%, #f1f5f9 45%, #eff6ff 100%);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.45s ease-out both;
+}
+
+@layer components {
+  /* Soft-Glass panel */
+  .glass-panel {
+    @apply rounded-3xl border border-white/60 bg-white/75 shadow-glass backdrop-blur-xl;
+  }
+
+  .glass-panel-sm {
+    @apply rounded-2xl border border-white/60 bg-white/70 shadow-glass backdrop-blur-xl;
+  }
+
+  .glass-inset {
+    @apply rounded-2xl border border-slate-200/50 bg-white/80 shadow-inset-soft backdrop-blur-md;
+  }
+
+  .soft-input {
+    @apply rounded-2xl border border-slate-200/50 bg-white/85 px-3 py-2 text-sm shadow-inset-soft outline-none transition-all duration-200;
+    @apply focus:border-teal-400/50 focus:bg-white focus:ring-2 focus:ring-teal-500/15;
+  }
+
+  .soft-textarea {
+    @apply rounded-2xl border border-slate-200/50 bg-white/85 px-3 py-2 text-sm leading-relaxed shadow-inset-soft outline-none transition-all duration-200;
+    @apply resize-y focus:border-teal-400/50 focus:bg-white focus:ring-2 focus:ring-teal-500/15;
+  }
+
+  .soft-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl text-sm font-medium transition-all duration-200;
+    @apply hover:scale-[1.01] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .soft-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-glass transition-all duration-200;
+    @apply hover:scale-[1.01] hover:bg-slate-800 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .soft-btn-accent {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl bg-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-glass transition-all duration-200;
+    @apply hover:scale-[1.01] hover:bg-teal-500 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .soft-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200/60 bg-white/70 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-glass backdrop-blur-md transition-all duration-200;
+    @apply hover:scale-[1.01] hover:bg-white active:scale-[0.99] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .soft-tag {
+    @apply inline-flex max-w-full items-center rounded-xl border px-2.5 py-1 transition-all duration-200;
+  }
+}
+
+.prose-resume h1 {
+  @apply font-display text-3xl text-slate-900 mb-2;
+}
+
+.prose-resume h2 {
+  @apply font-display text-xl text-slate-900 mt-6 mb-2 border-b border-slate-200/60 pb-1;
+}
+
+.prose-resume h3 {
+  @apply text-base font-semibold text-slate-800 mt-4 mb-1;
+}
+
+.prose-resume p {
+  @apply text-sm leading-relaxed text-slate-700 my-2;
+}
+
+.prose-resume ul {
+  @apply list-disc pl-5 space-y-1 text-sm text-slate-700 my-2;
+}
+
+.prose-resume ol {
+  @apply list-decimal pl-5 space-y-1 text-sm text-slate-700 my-2;
+}
+
+.prose-resume strong {
+  @apply font-semibold text-slate-900;
+}
+
+.prose-resume blockquote {
+  @apply border-l-4 border-teal-500 bg-teal-50/60 pl-4 py-2 my-3 text-sm text-slate-700 italic;
+}
+
+.prose-resume a {
+  @apply text-teal-700 underline;
+}
+
+.prose-resume hr {
+  @apply my-4 border-slate-200/60;
+}
+
+.editable-resume:focus {
+  outline: none;
+}
+
+.editable-resume[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+}
+
+.cv-editor-host:focus {
+  outline: none;
+}

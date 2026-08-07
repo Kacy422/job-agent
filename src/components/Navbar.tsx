@@ -1,0 +1,69 @@
+"use client";
+
+import {
+  ClipboardList,
+  UserRound,
+  FileText,
+  Bot,
+  Sparkles,
+} from "lucide-react";
+import { useApp, type TabId } from "@/context/AppContext";
+
+const TABS: { id: TabId; label: string; icon: typeof ClipboardList }[] = [
+  { id: "board", label: "求职总结", icon: ClipboardList },
+  { id: "profile", label: "人物画像", icon: UserRound },
+  { id: "resume", label: "专属简历", icon: FileText },
+  { id: "apply", label: "自动网申", icon: Bot },
+];
+
+export function Navbar() {
+  const { tab, setTab, applications } = useApp();
+  const activeCount = applications.filter(
+    (a) => a.trackStatus !== "applied"
+  ).length;
+
+  return (
+    <header className="sticky top-0 z-40 border-b border-white/50 bg-white/60 shadow-glass backdrop-blur-xl">
+      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 text-teal-300 shadow-glass">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-display text-xl tracking-tight text-slate-900">
+              JobAgent
+            </p>
+            <p className="text-xs tracking-wide text-slate-500">
+              人物画像 · 专属简历 · 求职总结
+              {applications.length > 0
+                ? ` · ${applications.length} 个岗位`
+                : ""}
+              {activeCount > 0 ? ` · ${activeCount} 进行中` : ""}
+            </p>
+          </div>
+        </div>
+
+        <nav className="flex flex-wrap gap-1 rounded-3xl border border-white/60 bg-white/70 p-1.5 shadow-glass backdrop-blur-xl">
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`inline-flex items-center gap-2 rounded-2xl px-3.5 py-2 text-sm font-medium transition-all duration-200 hover:scale-[1.01] ${
+                  active
+                    ? "bg-slate-900 text-white shadow-glass"
+                    : "text-slate-600 hover:bg-white/90 hover:text-slate-900"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+    </header>
+  );
+}
