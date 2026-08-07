@@ -6,9 +6,6 @@ import {
   Download,
   Wand2,
   ArrowLeft,
-  Lightbulb,
-  ChevronDown,
-  ChevronUp,
   Mail,
   Mic,
   Save,
@@ -18,6 +15,7 @@ import {
   Copy,
   Check,
   RefreshCw,
+  MessageSquareText,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { EditableCvPreview } from "@/components/EditableCvPreview";
@@ -30,15 +28,69 @@ import {
 import { isValidCompanyName, isValidJobTitle } from "@/lib/job-meta";
 import {
   EMPTY_CV_RATIONALE,
-  formatRationaleLine,
   isCvRationaleEmpty,
   normalizeCvRationale,
-  type CvRationaleItem,
   type JobApplication,
 } from "@/types";
 
 const SHORT_JD_HINT =
-  "已根据链接预填公司/岗位。若 JD 文本过短，请将网页上的完整 Job Description 粘贴到下方框内以获得更精准匹配。";
+  "已根据链接预填公司与岗位。如需更精细匹配，请改用下方「路径 B」粘贴完整 JD 文本（将清空链接，避免重复消耗 Token）。";
+
+const CV_REV_MARK_CSS = `
+mark.cv-rev-add {
+  background: linear-gradient(transparent 60%, rgba(16, 185, 129, 0.35) 60%);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+  cursor: help;
+}
+mark.cv-rev-add::after {
+  content: attr(data-rev);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  margin-left: 3px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #059669;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  vertical-align: super;
+  line-height: 14px;
+}
+`;
+
+function stripRevisionMarks(html: string) {
+  return html
+    .replace(/<\/?mark\b[^>]*>/gi, "")
+    .replace(/\s*data-rev="\d+"/gi, "");
+}
+
+function applyRevisionHighlights(
+  html: string,
+  items: { text: string }[]
+): string {
+  let out = stripRevisionMarks(html);
+  items.forEach((item, i) => {
+    const needle = item.text.trim().slice(0, 56);
+    if (needle.length < 3) return;
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    try {
+      const re = new RegExp(`(${escaped})`, "i");
+      if (!re.test(out)) return;
+      out = out.replace(
+        re,
+        `<mark class="cv-rev-add" data-rev="${i + 1}" title="修订 ${i + 1}">$1</mark>`
+      );
+    } catch {
+      /* ignore bad patterns */
+    }
+  });
+  return out;
+}
 
 function looksLikeUrl(text: string) {
   const t = text.trim();
@@ -92,7 +144,6 @@ export function ResumeGenerator() {
   const exportRef = useRef<HTMLDivElement>(null);
   const clearingRef = useRef(false);
   const urlParseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoFillJdRef = useRef(false);
 
   const hasCv = Boolean(resumeHtml || tailoredResume?.includes("cv-sheet"));
   const hasArtifacts = Boolean(
@@ -172,37 +223,51 @@ export function ResumeGenerator() {
     if (isValidJobTitle(title)) setDraftTitle(title.trim());
   }
 
-  /** 粘贴/输入 Job URL 后自动抓取 JD 并填入下方文本框（保留 URL） */
+  /**
+   * 路径 A：粘贴 Job URL → 清空 JD 文本框，仅解析链接（公司/岗位 + 缓存 JD）
+   * 不把全文灌回文本框，避免与路径 B 同时消耗 Token
+   */
   function onUrlChange(value: string) {
     setDraftJobUrl(value);
     const trimmed = value.trim();
+    if (urlParseTimerRef.current) clearTimeout(urlParseTimerRef.current);
+
     if (!trimmed) {
-      if (urlParseTimerRef.current) clearTimeout(urlParseTimerRef.current);
+      setCachedParsedJd("");
       return;
     }
-    if (!looksLikeUrl(trimmed)) return;
 
-    if (urlParseTimerRef.current) clearTimeout(urlParseTimerRef.current);
+    // 互斥：清空文本 JD
+    setDraftJd("");
+    setCachedParsedJd("");
+
+    if (!looksLikeUrl(trimmed)) return;
     urlParseTimerRef.current = setTimeout(() => {
       void autoExtractJdFromUrl(trimmed);
     }, 500);
   }
 
-  /** 手动编辑 JD 时不再清空 URL（URL 仍作网申链接） */
+  /**
+   * 路径 B：手动输入/修改 JD 文本 → 清空上方链接，仅分析文本
+   */
   function onJdChange(value: string) {
-    if (autoFillJdRef.current) {
-      autoFillJdRef.current = false;
-    }
     setDraftJd(value);
+    if (value.trim()) {
+      setDraftJobUrl("");
+      setCachedParsedJd("");
+      if (urlParseTimerRef.current) clearTimeout(urlParseTimerRef.current);
+    }
   }
 
   async function autoExtractJdFromUrl(rawUrl: string) {
     const url = normalizeUrl(rawUrl);
     if (!url || !looksLikeUrl(url)) return;
     beginNewJobParse();
+    // 保持路径 A：文本框保持为空
+    setDraftJd("");
     setLoadingParse(true);
     setError("");
-    setParseHint("正在从链接提取 JD…");
+    setParseHint("路径 A：正在从链接提取岗位信息…");
     try {
       const res = await fetch("/api/parse-job", {
         method: "POST",
@@ -224,15 +289,15 @@ export function ResumeGenerator() {
       ).trim();
 
       applyParsedMeta(company, title);
+      // 仅缓存供生成 CV，不写入文本框
       setCachedParsedJd(jd);
+      setDraftJd("");
 
       if (jd && meaningfulTextLen(jd) >= 40) {
-        autoFillJdRef.current = true;
-        setDraftJd(jd);
         setParseHint(
           softFallback
             ? hint || SHORT_JD_HINT
-            : `已自动提取 JD（${company || "公司未识别"} · ${title || "岗位未识别"}），可继续编辑后生成 CV`
+            : `路径 A 已解析链接：${company || "公司未识别"} · ${title || "岗位未识别"}（JD 已缓存，文本框保持清空以省 Token）`
         );
       } else {
         setParseHint(hint || SHORT_JD_HINT);
@@ -371,18 +436,17 @@ export function ResumeGenerator() {
     title?: string;
     applyUrl?: string;
   }> {
-    // Prefer filled JD text; fall back to cached scrape / URL parse
-    if (meaningfulTextLen(draftJd) >= 50) {
+    // 路径 B：文本框有实质 JD
+    if (meaningfulTextLen(draftJd) >= 50 && !draftJobUrl.trim()) {
       return {
         jd: draftJd.trim(),
         company: draftCompany,
         title: draftTitle,
-        applyUrl: draftJobUrl.trim()
-          ? normalizeUrl(draftJobUrl.trim())
-          : undefined,
+        applyUrl: undefined,
       };
     }
 
+    // 路径 A：链接优先（文本框应为空）
     if (draftJobUrl.trim()) {
       if (meaningfulTextLen(cachedParsedJd) >= 50) {
         return {
@@ -399,12 +463,12 @@ export function ResumeGenerator() {
       if (!resolved.jd?.trim() || meaningfulTextLen(resolved.jd) < 50) {
         throw new Error(resolved.hint || SHORT_JD_HINT);
       }
-      if (resolved.jd) {
-        autoFillJdRef.current = true;
-        setDraftJd(resolved.jd);
-        setCachedParsedJd(resolved.jd);
-      }
-      return resolved;
+      setCachedParsedJd(resolved.jd);
+      setDraftJd(""); // 保持路径 A 互斥
+      return {
+        ...resolved,
+        applyUrl: normalizeUrl(draftJobUrl.trim()),
+      };
     }
 
     if (draftJd.trim()) {
@@ -412,13 +476,11 @@ export function ResumeGenerator() {
         jd: draftJd.trim(),
         company: draftCompany,
         title: draftTitle,
-        applyUrl: draftJobUrl.trim()
-          ? normalizeUrl(draftJobUrl.trim())
-          : undefined,
+        applyUrl: undefined,
       };
     }
 
-    throw new Error("请粘贴岗位网址（自动提取 JD）或手动粘贴 JD");
+    throw new Error("请选择路径 A（粘贴链接）或路径 B（粘贴 JD 文本）");
   }
 
   async function applyCvResult(data: {
@@ -426,10 +488,14 @@ export function ResumeGenerator() {
     rationale?: unknown;
     rationaleList?: unknown;
   }) {
-    const html = String(data.tailoredResumeHtml || "");
-    setResumeHtml(html);
-    setTailoredResume(html);
-    setRationale(normalizeCvRationale(data.rationale ?? data.rationaleList));
+    const rationaleNext = normalizeCvRationale(
+      data.rationale ?? data.rationaleList
+    );
+    const rawHtml = String(data.tailoredResumeHtml || "");
+    const highlighted = applyRevisionHighlights(rawHtml, rationaleNext.added);
+    setResumeHtml(highlighted);
+    setTailoredResume(stripRevisionMarks(highlighted));
+    setRationale(rationaleNext);
     bindGenerationSource();
     setShowRationale(true);
     setCvEpoch((n) => n + 1);
@@ -581,7 +647,7 @@ export function ResumeGenerator() {
       title: draftTitle.trim() || "未命名岗位",
       jd: draftJd || cachedParsedJd,
       applyUrl: draftJobUrl || undefined,
-      cvHtml: liveHtml || undefined,
+      cvHtml: liveHtml ? stripRevisionMarks(liveHtml) : undefined,
       coverLetter: coverLetter || undefined,
       rationale: isCvRationaleEmpty(rationale) ? undefined : rationale,
       interviewQA: interviewQA?.length ? interviewQA : undefined,
@@ -595,12 +661,12 @@ export function ResumeGenerator() {
   }
 
   function liveCvHtml() {
-    return (
+    const raw =
       exportRef.current?.innerHTML?.trim() ||
       resumeHtml.trim() ||
       tailoredResume ||
-      ""
-    );
+      "";
+    return stripRevisionMarks(raw);
   }
 
   function exportCvPdf() {
@@ -633,6 +699,12 @@ export function ResumeGenerator() {
     setTimeout(() => setCopiedKey(null), 1500);
   }
 
+  const inputPath: "url" | "jd" | null = draftJobUrl.trim()
+    ? "url"
+    : draftJd.trim()
+      ? "jd"
+      : null;
+
   function exportCoverPdf() {
     if (!coverLetter) return;
     exportHtmlPdf(wrapPlainAsDoc(coverLetter), "Cover Letter");
@@ -659,7 +731,7 @@ export function ResumeGenerator() {
         emoji="📝"
         step="步骤 2 · 专属简历"
         title="一键改写 CV · 按需生成其他材料"
-        description="粘贴岗位链接将自动提取 JD 并填入下方；再根据 JD 深度定制 CV，支持二次手动优化。"
+        description="路径 A 粘贴链接 / 路径 B 粘贴 JD（互斥，省 Token）。生成后左侧 CV、右侧批注式修改建议。"
         accent="teal"
         actions={
           <>
@@ -732,10 +804,12 @@ export function ResumeGenerator() {
             <div className="mb-1 flex items-center justify-between gap-2">
               <label className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
                 <Link2 className="h-3.5 w-3.5" />
-                工作网址 / JD 链接
-                <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] text-teal-700">
-                  粘贴即自动提取
-                </span>
+                路径 A · 工作网址 / JD 链接
+                {inputPath === "url" && (
+                  <span className="rounded bg-teal-50 px-1.5 py-0.5 text-[10px] text-teal-700">
+                    当前路径
+                  </span>
+                )}
               </label>
             </div>
             <div className="mb-2 flex gap-2">
@@ -749,7 +823,7 @@ export function ResumeGenerator() {
                     onUrlChange(text.trim());
                   }
                 }}
-                placeholder="🔗 粘贴岗位 URL，自动提取 JD 到下方…"
+                placeholder="🔗 粘贴 URL（自动清空下方文本框，仅解析链接）"
                 className="min-w-0 flex-1 soft-input"
               />
               <button
@@ -758,7 +832,7 @@ export function ResumeGenerator() {
                 disabled={loadingParse || !canParseUrl}
                 className="soft-btn shrink-0 rounded-2xl border border-teal-200/60 bg-teal-50/80 px-3 py-2 text-teal-900 shadow-glass disabled:opacity-50"
               >
-                {loadingParse ? (
+                {loadingParse && inputPath === "url" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Link2 className="h-4 w-4" />
@@ -768,10 +842,10 @@ export function ResumeGenerator() {
             </div>
             <div className="mb-1 flex items-center justify-between gap-2">
               <label className="text-xs font-medium text-slate-600">
-                JD 描述
-                {draftJd.trim() && (
+                路径 B · JD 描述
+                {inputPath === "jd" && (
                   <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700">
-                    可编辑
+                    当前路径
                   </span>
                 )}
               </label>
@@ -793,7 +867,7 @@ export function ResumeGenerator() {
             <textarea
               value={draftJd}
               onChange={(e) => onJdChange(e.target.value)}
-              placeholder="粘贴完整 JD，或粘贴上方 URL 后自动填充…"
+              placeholder="粘贴完整 JD（自动清空上方链接，仅分析文本）…"
               className="soft-textarea mb-3 h-44 w-full p-3"
               style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
             />
@@ -824,8 +898,11 @@ export function ResumeGenerator() {
               根据 JD 改写 CV
             </button>
             <p className="mt-2 text-[11px] text-slate-400">
-              粘贴 URL 自动提取 JD · 画像 {fullExperience.length} 字
-              {cachedParsedJd ? " · 已缓存链接 JD" : ""}
+              链接 / 文本互斥 · 画像 {fullExperience.length} 字
+              {inputPath === "url" && cachedParsedJd
+                ? " · 路径 A 已缓存链接 JD"
+                : ""}
+              {inputPath === "jd" ? " · 路径 B 文本分析" : ""}
             </p>
           </div>
 
@@ -927,120 +1004,126 @@ export function ResumeGenerator() {
         </div>
 
         <div className="space-y-4">
-          {(!isCvRationaleEmpty(rationale) || hasCv) && (
-            <div className="rounded-2xl border border-amber-200/50 bg-amber-50/60 p-5 shadow-glass backdrop-blur-xl">
-              <button
-                type="button"
-                onClick={() => setShowRationale((v) => !v)}
-                className="mb-3 flex w-full items-center gap-2 text-left"
-              >
-                <Lightbulb className="h-4 w-4 text-amber-600" />
-                <span className="flex-1 text-sm font-semibold tracking-wide text-amber-950">
-                  修改逻辑
-                </span>
-                {showRationale ? (
-                  <ChevronUp className="h-4 w-4 text-amber-700" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-amber-700" />
-                )}
-              </button>
-              {showRationale && (
-                <div className="space-y-3">
-                  <RationaleSection
-                    emoji="🟢"
-                    title="增加"
-                    items={rationale.added}
-                    tone="emerald"
-                  />
-                  <RationaleSection
-                    emoji="🔴"
-                    title="减少"
-                    items={rationale.removed}
-                    tone="rose"
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
           {hasCv ? (
-            <>
-              <EditableCvPreview
-                key={`cv-${cvEpoch}`}
-                initialHtml={resumeHtml || tailoredResume}
-                onHtmlChange={(html) => {
-                  setResumeHtml(html);
-                  setTailoredResume(html);
-                }}
-                exportRef={exportRef}
-                toolbar={
-                  <>
-                    <button
-                      type="button"
-                      onClick={exportCvPdf}
-                      className="soft-btn rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-900"
-                    >
-                      <Download className="h-3 w-3" />
-                      Download PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={exportCvWord}
-                      className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                    >
-                      <FileText className="h-3 w-3" />
-                      Download Word
-                    </button>
-                    <button
-                      type="button"
-                      onClick={copyCvText}
-                      className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
-                    >
-                      {copiedKey === "cv" ? (
-                        <Check className="h-3 w-3 text-emerald-600" />
-                      ) : (
-                        <Copy className="h-3 w-3" />
-                      )}
-                      Copy
-                    </button>
-                  </>
-                }
-              />
-
-              <div className="glass-panel p-5">
-                <h4 className="mb-1 text-sm font-semibold text-slate-900">
-                  手动添加修改需求
-                </h4>
-                <p className="mb-3 text-xs text-slate-500">
-                  基于初稿二次优化：说明你想强调或调整的方向，再点「重新优化
-                  CV」。
-                </p>
-                <textarea
-                  value={revisionNotes}
-                  onChange={(e) => setRevisionNotes(e.target.value)}
-                  rows={3}
-                  placeholder='例如：强调我的 GIS 数据分析经验；语言更偏向商务风格；弱化与岗位无关的社团经历…'
-                  className="soft-textarea mb-3 w-full p-3"
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.42fr)]">
+              <div className="min-w-0">
+                <EditableCvPreview
+                  key={`cv-${cvEpoch}`}
+                  initialHtml={resumeHtml || tailoredResume}
+                  onHtmlChange={(html) => {
+                    setResumeHtml(html);
+                    setTailoredResume(stripRevisionMarks(html));
+                  }}
+                  exportRef={exportRef}
+                  extraCss={CV_REV_MARK_CSS}
+                  toolbar={
+                    <>
+                      <button
+                        type="button"
+                        onClick={exportCvPdf}
+                        className="soft-btn rounded-lg border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-medium text-teal-900"
+                      >
+                        <Download className="h-3 w-3" />
+                        Download PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={exportCvWord}
+                        className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                      >
+                        <FileText className="h-3 w-3" />
+                        Download Word
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copyCvText}
+                        className="soft-btn rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700"
+                      >
+                        {copiedKey === "cv" ? (
+                          <Check className="h-3 w-3 text-emerald-600" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        Copy
+                      </button>
+                    </>
+                  }
                 />
-                <button
-                  type="button"
-                  onClick={refineCv}
-                  disabled={loadingRefine || !revisionNotes.trim()}
-                  className="soft-btn-accent w-full py-3 font-semibold disabled:opacity-50"
-                >
-                  {loadingRefine ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  重新优化 CV
-                </button>
               </div>
-            </>
+
+              <aside className="flex min-h-0 flex-col gap-3">
+                <div className="rounded-2xl border border-amber-200/60 bg-amber-50/70 px-3 py-2 shadow-glass">
+                  <div className="flex items-center gap-2">
+                    <MessageSquareText className="h-4 w-4 text-amber-700" />
+                    <p className="text-xs font-semibold tracking-wide text-amber-950">
+                      修订批注 · Word 模式
+                    </p>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-amber-900/80">
+                    左侧高亮对应编号批注；右侧说明增加 / 删减原因。
+                  </p>
+                </div>
+
+                <div className="max-h-[70vh] space-y-2.5 overflow-y-auto pr-0.5">
+                  {rationale.added.map((item, i) => (
+                    <WordCommentCard
+                      key={`add-${i}-${item.text.slice(0, 12)}`}
+                      index={i + 1}
+                      kind="added"
+                      text={item.text}
+                      reason={item.reason}
+                    />
+                  ))}
+                  {rationale.removed.map((item, i) => (
+                    <WordCommentCard
+                      key={`rm-${i}-${item.text.slice(0, 12)}`}
+                      index={rationale.added.length + i + 1}
+                      kind="removed"
+                      text={item.text}
+                      reason={item.reason}
+                    />
+                  ))}
+                  {isCvRationaleEmpty(rationale) && (
+                    <p className="rounded-xl border border-dashed border-slate-200 bg-white/60 px-3 py-6 text-center text-xs text-slate-400">
+                      生成 CV 后将在此显示批注
+                    </p>
+                  )}
+                </div>
+
+                <div className="glass-panel p-4">
+                  <h4 className="mb-1 text-sm font-semibold text-slate-900">
+                    手动添加修改需求
+                  </h4>
+                  <p className="mb-2 text-[11px] text-slate-500">
+                    二次优化后再刷新批注卡片
+                  </p>
+                  <textarea
+                    value={revisionNotes}
+                    onChange={(e) => setRevisionNotes(e.target.value)}
+                    rows={3}
+                    placeholder='例如：强调 GIS 数据分析；语言更偏商务…'
+                    className="soft-textarea mb-2 w-full p-2.5 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={refineCv}
+                    disabled={loadingRefine || !revisionNotes.trim()}
+                    className="soft-btn-accent w-full py-2.5 text-sm font-semibold disabled:opacity-50"
+                  >
+                    {loadingRefine ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    重新优化 CV
+                  </button>
+                </div>
+              </aside>
+            </div>
           ) : (
             <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-dashed border-slate-300/70 bg-white/50 px-6 text-center text-sm text-slate-400 shadow-glass backdrop-blur-md">
-              粘贴岗位网址（自动提取 JD）或手动粘贴 JD，点击「根据 JD 改写
-              CV」后，此处显示拉满 A4 的英文简历
+              选择路径 A（链接）或路径 B（JD 文本），点击「根据 JD 改写
+              CV」后，此处以 Word 批注模式展示简历与修改建议
             </div>
           )}
         </div>
@@ -1049,41 +1132,49 @@ export function ResumeGenerator() {
   );
 }
 
-function RationaleSection({
-  emoji,
-  title,
-  items,
-  tone,
+function WordCommentCard({
+  index,
+  kind,
+  text,
+  reason,
 }: {
-  emoji: string;
-  title: string;
-  items: CvRationaleItem[];
-  tone: "emerald" | "rose";
+  index: number;
+  kind: "added" | "removed";
+  text: string;
+  reason: string;
 }) {
-  const tag =
-    tone === "emerald"
-      ? "border-emerald-200/70 bg-emerald-50 text-emerald-800"
-      : "border-rose-200/70 bg-rose-50 text-rose-800";
+  const isAdd = kind === "added";
   return (
-    <div className="rounded-xl border border-white/50 bg-white/55 p-3 shadow-sm backdrop-blur-sm">
-      <span
-        className={`mb-2 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold tracking-wide ${tag}`}
-      >
-        <span aria-hidden>{emoji}</span>
-        {title}
-      </span>
-      <ul className="space-y-1.5">
-        {(items.length ? items : [{ text: "暂无", reason: "" }]).map(
-          (item, i) => (
-            <li
-              key={`${title}-${i}-${item.text.slice(0, 16)}`}
-              className="text-sm leading-relaxed text-slate-700"
-            >
-              • {formatRationaleLine(item)}
-            </li>
-          )
-        )}
-      </ul>
-    </div>
+    <article
+      className={`relative rounded-2xl border bg-white/90 p-3.5 shadow-sm backdrop-blur-sm ${
+        isAdd
+          ? "border-l-4 border-l-emerald-500 border-emerald-100"
+          : "border-l-4 border-l-rose-400 border-rose-100"
+      }`}
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white ${
+            isAdd ? "bg-emerald-600" : "bg-rose-500"
+          }`}
+        >
+          {index}
+        </span>
+        <span
+          className={`text-[10px] font-semibold uppercase tracking-wide ${
+            isAdd ? "text-emerald-700" : "text-rose-700"
+          }`}
+        >
+          {isAdd ? "增加 / 强化" : "删减 / 弱化"}
+        </span>
+      </div>
+      <p className="text-sm font-medium leading-snug text-slate-900">{text}</p>
+      {reason ? (
+        <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+          <span className="font-medium text-slate-600">原因：</span>
+          {reason}
+        </p>
+      ) : null}
+    </article>
   );
 }

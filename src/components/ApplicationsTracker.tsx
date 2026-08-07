@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  LayoutGrid,
+  SquareKanban,
   Trash2,
   FileText,
   Mail,
@@ -135,7 +135,7 @@ export function ApplicationsTracker() {
           accent="indigo"
         />
         <div className="rounded-3xl border border-dashed border-slate-300/70 bg-white/60 px-8 py-16 text-center shadow-glass backdrop-blur-xl">
-          <LayoutGrid className="mx-auto h-10 w-10 text-slate-400" />
+          <SquareKanban className="mx-auto h-10 w-10 text-slate-400" />
           <h3 className="mt-4 font-display text-xl text-slate-900">
             求职进度还是空的
           </h3>

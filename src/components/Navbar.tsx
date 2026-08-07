@@ -6,12 +6,12 @@ import {
   FileText,
   Bot,
   Sparkles,
-  TrendingUp,
+  SquareKanban,
 } from "lucide-react";
 import { useApp, type TabId } from "@/context/AppContext";
 
-const TABS: { id: TabId; label: string; icon: typeof TrendingUp }[] = [
-  { id: "board", label: "求职进度", icon: TrendingUp },
+const TABS: { id: TabId; label: string; icon: typeof SquareKanban }[] = [
+  { id: "board", label: "求职进度", icon: SquareKanban },
   { id: "profile", label: "人物画像", icon: UserRound },
   { id: "resume", label: "专属简历", icon: FileText },
   { id: "apply", label: "自动网申", icon: Bot },

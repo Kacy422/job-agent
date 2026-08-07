@@ -193,7 +193,7 @@ export function ProfileBuilder() {
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              Save 保存
+              Save
             </button>
             <button
               type="button"
@@ -506,7 +506,7 @@ export function ProfileBuilder() {
           ) : (
             <Save className="h-4 w-4" />
           )}
-          Save · 保存到云端
+          Save
         </button>
         <p className="text-center text-xs text-slate-400">
           已组合全量经历 {fullExperience.length} 字符 · 点击 Save

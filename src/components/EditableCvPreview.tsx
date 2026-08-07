@@ -8,6 +8,7 @@ interface Props {
   onHtmlChange: (html: string) => void;
   exportRef: RefObject<HTMLDivElement | null>;
   toolbar?: ReactNode;
+  extraCss?: string;
 }
 
 /** A4 Visual Editor — contentEditable, print uses live DOM */
@@ -16,6 +17,7 @@ export function EditableCvPreview({
   onHtmlChange,
   exportRef,
   toolbar,
+  extraCss,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const seeded = useRef(false);
@@ -53,7 +55,11 @@ export function EditableCvPreview({
         </p>
         <div className="flex flex-wrap items-center gap-1.5">{toolbar}</div>
       </div>
-      <style dangerouslySetInnerHTML={{ __html: CV_SHEET_CSS }} />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `${CV_SHEET_CSS}\n${extraCss || ""}`,
+        }}
+      />
       <div className="cv-a4-frame overflow-hidden bg-white">
         <div
           ref={bindRef}
