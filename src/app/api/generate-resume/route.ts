@@ -64,8 +64,8 @@ Rewrite ONLY using facts from the candidate's Full Experience Library.
 - Map library bullets to JD keywords / pain points (rephrase & prioritise; never invent employers, degrees, dates, or metrics).
 - Elevate matching experience; demote or trim low-relevance content.
 - Prefer quantified, achievement-oriented HK Business English.
-- Internship/work: EXACTLY 2 bullets per employer, tightly JD-aligned (merge facts; drop weak lines).
-- Fit everything on a single A4 page (concise wording).
+- Internship/work: EXACTLY 2 substantial JD-matched bullets per employer (full sentences with outcomes; not sparse one-liners).
+- Fill one A4 page evenly — avoid large empty gaps and avoid page-2 overflow.
 
 LANGUAGE RULE (MANDATORY):
 - tailoredResumeHtml: high-quality Business English for Hong Kong applications. NO Chinese inside the CV HTML.
@@ -88,7 +88,7 @@ Output STRICT JSON only (no markdown fences):
 ${CV_HTML_SCHEMA_HINT}
 Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS (certificates as bold names inside SKILLS — no CERTIFICATES heading).
 Internship headers MUST be "Company, City" with role on the next line (cv-role).
-STRICT: every internship/work entry has EXACTLY 2 JD-matched bullet points.
+STRICT: every internship/work entry has EXACTLY 2 JD-matched, substantive bullet points.
 HKU degree line MUST include inline GPA: "MSc … | GPA: X.X/Y.Y".
 
 ${coursePoolPromptBlock()}

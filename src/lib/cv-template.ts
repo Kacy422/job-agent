@@ -1,6 +1,6 @@
 /**
- * A4 single-page CV — tight typography to stay on one page
- * Internship: "Company, City" | date → role → exactly 2 bullets
+ * A4 single-page CV — classic readable typography
+ * Internship: "Company, City" | date → role → 2 substantial bullets
  * Projects: org/project | date → role → bullets
  */
 
@@ -8,6 +8,8 @@ export const CV_SHEET_CSS = `
 .cv-a4-frame {
   width: 210mm;
   height: 297mm;
+  max-width: 100%;
+  margin: 0 auto;
   background: #fff;
   box-shadow: 0 1px 8px rgba(15, 23, 42, 0.08);
   overflow: hidden;
@@ -15,15 +17,15 @@ export const CV_SHEET_CSS = `
 }
 .cv-sheet {
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 10.5px;
-  line-height: 1.32;
+  font-size: 10.5pt;
+  line-height: 1.45;
   color: #000;
   background: #fff;
   width: 210mm;
   height: 297mm;
-  max-height: 297mm;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 9mm 10mm;
+  padding: 12mm 14mm;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -33,21 +35,21 @@ export const CV_SHEET_CSS = `
 .cv-sheet * { box-sizing: border-box; }
 .cv-header {
   text-align: center;
-  margin: 0 0 10px;
+  margin: 0 0 16px;
   flex-shrink: 0;
 }
 .cv-name {
-  font-size: 22px;
+  font-size: 22pt;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.9px;
   margin: 0;
-  line-height: 1.1;
+  line-height: 1.15;
 }
 .cv-contact {
-  font-size: 10.5px;
-  margin-top: 5px;
-  line-height: 1.3;
+  font-size: 10.5pt;
+  margin-top: 8px;
+  line-height: 1.45;
   font-weight: 400;
 }
 .cv-body {
@@ -56,27 +58,26 @@ export const CV_SHEET_CSS = `
   flex-direction: column;
   justify-content: space-between;
   min-height: 0;
-  overflow: hidden;
 }
 .cv-section {
-  margin: 0 0 10px;
+  margin: 0 0 18px;
   flex: 0 1 auto;
 }
 .cv-body > .cv-section:last-child {
   margin-bottom: 0;
 }
 .cv-section-title {
-  font-size: 13px;
+  font-size: 13pt;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.4px;
-  border-bottom: 1.5px solid #000;
-  margin: 0 0 6px;
-  padding: 0 0 2px;
-  line-height: 1.25;
+  letter-spacing: 0.45px;
+  border-bottom: 2px solid #000;
+  margin: 0 0 10px;
+  padding: 0 0 3px;
+  line-height: 1.3;
 }
 .cv-entry {
-  margin: 0 0 8px;
+  margin: 0 0 12px;
 }
 .cv-entry:last-child {
   margin-bottom: 0;
@@ -85,7 +86,7 @@ export const CV_SHEET_CSS = `
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
   width: 100%;
 }
@@ -93,60 +94,60 @@ export const CV_SHEET_CSS = `
 .cv-section > .cv-bullets + .cv-row,
 .cv-section > .cv-sub + .cv-row,
 .cv-section > .cv-role + .cv-row {
-  margin-top: 8px;
+  margin-top: 12px;
 }
 .cv-left {
   flex: 1;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: 11pt;
   font-weight: 700;
   color: #000;
-  line-height: 1.28;
+  line-height: 1.4;
 }
 .cv-role {
   display: block;
-  font-size: 10.5px;
+  font-size: 10.5pt;
   font-weight: 500;
   font-style: italic;
-  margin: 1px 0 0;
-  line-height: 1.3;
+  margin: 3px 0 0;
+  line-height: 1.4;
   color: #000;
 }
 .cv-left .cv-role {
-  margin-top: 2px;
+  margin-top: 3px;
 }
 .cv-row + .cv-role {
-  margin-top: 1px;
-  margin-bottom: 1px;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 .cv-right {
   flex-shrink: 0;
   text-align: right;
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: 10.5pt;
   font-weight: 400;
-  line-height: 1.28;
+  line-height: 1.4;
 }
 .cv-sub {
-  margin: 2px 0 3px;
+  margin: 4px 0 6px;
   font-weight: 400;
-  font-size: 10px;
-  line-height: 1.3;
+  font-size: 10.5pt;
+  line-height: 1.45;
 }
 .cv-bullets {
   list-style: none !important;
-  margin: 3px 0 0;
+  margin: 5px 0 0;
   padding: 0;
-  font-size: 10.5px;
-  line-height: 1.32;
+  font-size: 10.5pt;
+  line-height: 1.45;
 }
 .cv-bullets li {
   list-style: none !important;
   position: relative;
-  padding-left: 12px;
-  margin: 0 0 3px;
-  font-size: 10.5px;
-  line-height: 1.32;
+  padding-left: 14px;
+  margin: 0 0 5px;
+  font-size: 10.5pt;
+  line-height: 1.45;
   font-weight: 400;
 }
 .cv-bullets li:last-child {
@@ -165,9 +166,9 @@ export const CV_SHEET_CSS = `
   line-height: inherit;
 }
 .cv-skills-line {
-  margin: 3px 0;
-  font-size: 10.5px;
-  line-height: 1.32;
+  margin: 5px 0;
+  font-size: 10.5pt;
+  line-height: 1.45;
   font-weight: 400;
 }
 .cv-skills-line strong {
@@ -187,13 +188,12 @@ export const CV_SHEET_CSS = `
     box-shadow: none !important;
     width: 210mm !important;
     height: 297mm !important;
-    max-height: 297mm !important;
     overflow: hidden !important;
     page-break-after: avoid !important;
     page-break-inside: avoid !important;
   }
   .cv-sheet {
-    padding: 9mm 10mm !important;
+    padding: 12mm 14mm !important;
     transform: none !important;
   }
 }
@@ -233,8 +233,8 @@ export function buildEmptyCvHtml(): string {
         </div>
         <p class="cv-role">Engagement Department Intern</p>
         <ul class="cv-bullets">
-          <li>Conducted market research and data collection on ESG-focused companies in Mainland China, identifying potential partners and collaboration models to support targeted outreach</li>
-          <li>Worked proactively in an international NGO environment, strengthening cross-cultural collaboration, initiative, and learning agility</li>
+          <li>Conducted market research and data collection on ESG-focused companies in Mainland China, identifying potential partners, contact channels, and collaboration models to support targeted outreach and engagement strategies</li>
+          <li>Worked proactively in an international NGO environment, enhancing learning agility, initiative, cultural sensitivity, and cross-cultural collaboration skills</li>
         </ul>
       </div>
       <div class="cv-entry">
@@ -244,8 +244,8 @@ export function buildEmptyCvHtml(): string {
         </div>
         <p class="cv-role">Landscape Architect Intern</p>
         <ul class="cv-bullets">
-          <li>Conducted baseline site assessments and supported landscape planning for urban greening projects, aligning with sustainability and ESG principles</li>
-          <li>Researched local greening policies and contributed to green infrastructure, climate resilience, and low-impact development (LID) discussions</li>
+          <li>Conducted baseline site assessments and supported landscape planning for urban greening projects, integrating public consultation insights to identify environmental constraints and opportunities in line with sustainability and ESG principles</li>
+          <li>Researched local policies and regulatory frameworks related to urban greening and sustainable development, contributing to discussions on green infrastructure strategies, climate resilience, and low-impact development (LID) approaches</li>
         </ul>
       </div>
     </section>
@@ -328,14 +328,14 @@ Wrap each item in <div class="cv-entry">:
 === INTERNSHIP / WORK EXPERIENCE (critical) ===
 - cv-left MUST be exactly: "Company/Organization Name, City"
 - cv-right = dates; cv-role = job title only
-- STRICT: EACH internship/work entry MUST have EXACTLY 2 bullet points (never 1, never 3+).
-- Those 2 bullets must be highly distilled, merge the strongest facts, and maximise JD keyword match.
+- EACH internship/work entry: EXACTLY 2 bullet points (never 3+).
+- Write FULL, substantial bullets (about 25–40 words each): strong verbs, concrete outcomes, JD keywords — fill the page; do not leave sparse one-liners.
 
 === PROJECTS section title ===
 Use ONE of: "SCHOOL PROJECTS & LEADERSHIP" OR "PROJECTS & OTHER EXPERIENCES"
 
 === Projects / leadership items ===
-- cv-left = name; cv-right = dates; cv-role = identity; then bullets (prefer ≤2)
+- cv-left = name; cv-right = dates; cv-role = identity; then 1–2 substantive bullets
 
 === Education ===
 - cv-left = school; cv-right = dates
@@ -349,8 +349,9 @@ Use ONE of: "SCHOOL PROJECTS & LEADERSHIP" OR "PROJECTS & OTHER EXPERIENCES"
   <p class="cv-skills-line"><strong>BEAM Affiliate</strong>; <strong>CFA - ESG</strong></p>
 - NEVER use <h2>CERTIFICATES</h2>
 
-=== Single-page A4 ===
-- Keep copy concise so everything fits one A4 with the provided CSS (tight leading). Prefer shorter bullets over overflow.
+=== Single-page A4 (fill, don't starve) ===
+- Aim for a visually full one-page CV: substantive bullets + normal spacing (CSS handles margins).
+- Avoid huge empty regions; avoid overflowing to page 2.
 
 === Rules ===
 - Classes ONLY: cv-section, cv-section-title, cv-entry, cv-row, cv-left, cv-role, cv-right, cv-bullets, cv-skills-line, cv-sub

@@ -25,7 +25,10 @@ interface Props {
   extraCss?: string;
 }
 
-/** A4 Visual Editor — scaled to fit column width so full page is visible */
+/**
+ * A4 Visual Editor — prefer 1:1 rendering.
+ * Only gently shrink when the column is narrower than A4 (never height-compress).
+ */
 export function EditableCvPreview({
   initialHtml,
   contentKey = 0,
@@ -62,10 +65,9 @@ export function EditableCvPreview({
     const update = () => {
       const w = vp.clientWidth;
       if (w <= 0) return;
-      // Fit full A4 into column width (and soft-cap by viewport height)
-      const maxH = Math.max(320, window.innerHeight * 0.78);
-      const next = Math.min(w / A4_W_PX, maxH / A4_H_PX, 1);
-      setScale(Number.isFinite(next) && next > 0 ? next : 1);
+      // 1:1 when space allows; mild width-only fit otherwise (floor ~0.88)
+      const fitted = w >= A4_W_PX ? 1 : Math.max(0.88, w / A4_W_PX);
+      setScale(Number.isFinite(fitted) ? fitted : 1);
     };
     update();
     const ro = new ResizeObserver(update);
@@ -84,10 +86,10 @@ export function EditableCvPreview({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/50 bg-slate-100/40 p-2.5 sm:p-3">
+    <div className="rounded-2xl border border-slate-200/50 bg-slate-100/40 p-3 sm:p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-0.5">
         <p className="text-[11px] font-medium text-slate-500">
-          A4 CV · 整页预览 · 可编辑
+          A4 CV · 标准字号 · 可编辑
         </p>
         <div className="flex flex-wrap items-center gap-1.5">{toolbar}</div>
       </div>
@@ -96,7 +98,10 @@ export function EditableCvPreview({
           __html: `${CV_SHEET_CSS}\n${extraCss || ""}`,
         }}
       />
-      <div ref={viewportRef} className="relative w-full overflow-hidden">
+      <div
+        ref={viewportRef}
+        className="relative w-full overflow-x-auto overflow-y-visible"
+      >
         <div
           className="relative mx-auto"
           style={{
@@ -109,7 +114,7 @@ export function EditableCvPreview({
             style={{
               width: A4_W_PX,
               height: A4_H_PX,
-              transform: `scale(${scale})`,
+              transform: scale === 1 ? undefined : `scale(${scale})`,
             }}
           >
             <div
@@ -127,7 +132,7 @@ export function EditableCvPreview({
                 document.execCommand("insertText", false, text);
                 flush();
               }}
-              className="h-full w-full outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500/20 [&_.cv-sheet]:h-full [&_.cv-sheet]:max-h-full [&_.cv-sheet]:overflow-hidden"
+              className="h-full w-full outline-none focus:ring-2 focus:ring-inset focus:ring-teal-500/20 [&_.cv-sheet]:h-full [&_.cv-sheet]:overflow-hidden"
             />
           </div>
         </div>
