@@ -170,7 +170,13 @@ export const CV_SHEET_CSS = `
   line-height: 1.4;
   font-weight: 400;
 }
-.cv-skills-line strong {
+.cv-skills-line strong,
+.cv-skills-line b {
+  font-weight: 700;
+}
+/* User / editor bold inside body copy */
+.cv-sheet b,
+.cv-sheet strong {
   font-weight: 700;
 }
 
