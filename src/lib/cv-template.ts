@@ -103,6 +103,11 @@ export const CV_SHEET_CSS = `
   color: #000;
   line-height: 1.4;
 }
+/* Role italic after " | " when Company | Role share one line */
+.cv-role-inline {
+  font-weight: 500;
+  font-style: italic;
+}
 .cv-role {
   display: block;
   font-size: 10.5pt;
@@ -233,10 +238,9 @@ export function buildEmptyCvHtml(): string {
       <h2 class="cv-section-title">INTERNSHIP EXPERIENCE</h2>
       <div class="cv-entry">
         <div class="cv-row">
-          <div class="cv-left">Crossroads Foundation, Hong Kong</div>
+          <div class="cv-left">Crossroads Foundation, Hong Kong <span class="cv-role-inline">| Engagement Department Intern</span></div>
           <div class="cv-right">Dec 2025 - Now</div>
         </div>
-        <p class="cv-role">Engagement Department Intern</p>
         <ul class="cv-bullets">
           <li>Conducted market research and data collection on ESG-focused companies in Mainland China, identifying potential partners, contact channels, and collaboration models to support targeted outreach and engagement strategies</li>
           <li>Worked proactively in an international NGO environment, enhancing learning agility, initiative, cultural sensitivity, and cross-cultural collaboration skills</li>
@@ -244,10 +248,9 @@ export function buildEmptyCvHtml(): string {
       </div>
       <div class="cv-entry">
         <div class="cv-row">
-          <div class="cv-left">Chongqing Urban Greening Management Center, Chongqing</div>
+          <div class="cv-left">Chongqing Urban Greening Management Center, Chongqing <span class="cv-role-inline">| Landscape Architect Intern</span></div>
           <div class="cv-right">Jan - April 2025</div>
         </div>
-        <p class="cv-role">Landscape Architect Intern</p>
         <ul class="cv-bullets">
           <li>Conducted baseline site assessments and supported landscape planning for urban greening projects, integrating public consultation insights to identify environmental constraints and opportunities in line with sustainability and ESG principles</li>
           <li>Researched local policies and regulatory frameworks related to urban greening and sustainable development, contributing to discussions on green infrastructure strategies, climate resilience, and low-impact development (LID) approaches</li>
@@ -258,20 +261,18 @@ export function buildEmptyCvHtml(): string {
       <h2 class="cv-section-title">SCHOOL PROJECTS &amp; LEADERSHIP</h2>
       <div class="cv-entry">
         <div class="cv-row">
-          <div class="cv-left">Sustainable Architectural Design in Hong Kong</div>
+          <div class="cv-left">Sustainable Architectural Design in Hong Kong <span class="cv-role-inline">| Independent Developer</span></div>
           <div class="cv-right">Sept 2025 - Dec 2025</div>
         </div>
-        <p class="cv-role">Independent Developer</p>
         <ul class="cv-bullets">
           <li>Developed a climate-responsive building design and conducted a preliminary BEAM Plus NB v2.0 assessment, achieving a Gold rating outcome.</li>
         </ul>
       </div>
       <div class="cv-entry">
         <div class="cv-row">
-          <div class="cv-left">SWU Science Fiction Society</div>
+          <div class="cv-left">SWU Science Fiction Society <span class="cv-role-inline">| President</span></div>
           <div class="cv-right">Sept 2022 - Jun 2023</div>
         </div>
-        <p class="cv-role">President</p>
         <ul class="cv-bullets">
           <li>Led society operations across planning, publicity and finance, and drove content design and publishing on Xiaohongshu to grow engagement.</li>
         </ul>
@@ -467,6 +468,46 @@ export function enforceOneProjectBullet(html: string): string {
   return enforceBulletsInSection(html, /PROJECTS|LEADERSHIP/i, 1);
 }
 
+/**
+ * Merge separate <p class="cv-role"> into cv-left as "Company | Role"
+ * for internship / project / leadership entries (education keeps cv-role).
+ */
+export function mergeCompanyRoleInline(html: string): string {
+  return html.replace(
+    /(<h2[^>]*>)([\s\S]*?)(<\/h2>)([\s\S]*?)(?=<h2\b|$)/gi,
+    (full, open: string, titleInner: string, close: string, body: string) => {
+      const titleText = titleInner.replace(/<[^>]+>/g, " ");
+      if (!/INTERNSHIP|WORK EXPERIENCE|PROJECTS|LEADERSHIP/i.test(titleText)) {
+        return full;
+      }
+      // Pattern: cv-row > cv-left + cv-right, then optional sibling <p class="cv-role">
+      const merged = body.replace(
+        /(<div class="cv-left">)([\s\S]*?)(<\/div>)(\s*<div class="cv-right">[\s\S]*?<\/div>\s*<\/div>\s*)(?:<p class="cv-role">([\s\S]*?)<\/p>\s*)?/gi,
+        (
+          _m,
+          leftOpen: string,
+          leftInner: string,
+          leftClose: string,
+          rest: string,
+          role?: string
+        ) => {
+          const roleText = String(role || "")
+            .replace(/<[^>]+>/g, "")
+            .trim();
+          let left = leftInner.trim();
+          if (/cv-role-inline/i.test(left) || /\|\s*[^<]+/.test(left)) {
+            return `${leftOpen}${leftInner}${leftClose}${rest}`;
+          }
+          if (!roleText) return `${leftOpen}${leftInner}${leftClose}${rest}`;
+          left = `${left} <span class="cv-role-inline">| ${roleText}</span>`;
+          return `${leftOpen}${left}${leftClose}${rest}`;
+        }
+      );
+      return `${open}${titleInner}${close}${merged}`;
+    }
+  );
+}
+
 export const CV_HTML_SCHEMA_HINT = `Return HTML rooted in <div class="cv-sheet"> that FILLS exactly ONE A4 page (no overflow):
 
 === Structure ===
@@ -474,31 +515,30 @@ header.cv-header (p.cv-name + p.cv-contact) + div.cv-body with sections:
 EDUCATION → INTERNSHIP EXPERIENCE → (SCHOOL PROJECTS & LEADERSHIP OR PROJECTS & OTHER EXPERIENCES) → SKILLS
 Do NOT create a CERTIFICATES section heading.
 
-=== Entry pattern (EVERY internship / project / leadership item) ===
+=== Entry pattern ===
 Wrap each item in <div class="cv-entry">:
-1) Top row ONLY (flex space-between):
+1) Top row (flex space-between) — Company/Project and Role on THE SAME LINE:
    <div class="cv-row">
-     <div class="cv-left">ORG_OR_PROJECT_NAME</div>
+     <div class="cv-left">Company Name, City <span class="cv-role-inline">| Role Title</span></div>
      <div class="cv-right">DATE_RANGE</div>
    </div>
-2) Role / identity on the NEXT line (NOT inside cv-left):
-   <p class="cv-role">Role Title</p>
+   Example: <div class="cv-left">Crossroads Foundation, Hong Kong <span class="cv-role-inline">| Engagement Department Intern</span></div>
+2) Do NOT put role on a separate <p class="cv-role"> for internship / projects / leadership (education may still use <p class="cv-role"> for degree).
 3) Then bullets:
    <ul class="cv-bullets"><li>…</li></ul>
 
 === INTERNSHIP / WORK BULLETS (STAR-style, MANDATORY) ===
-- cv-left MUST be exactly: "Company/Organization Name, City"
-- cv-right = dates; cv-role = title only
-- EACH internship/work entry: EXACTLY 2 bullets (merge similar duties; ban fragmented micro-lists).
+- Header line MUST be: "Company/Organization Name, City | Role" (role in cv-role-inline span)
+- cv-right = dates
+- EACH internship/work entry: EXACTLY 2 bullets tightly mapped to Target JD keywords from the Full Experience Library
 - Every bullet MUST follow: Action Verb + Task/Context + Tools/Methods + Quantifiable Impact/Value
-- Fluency: idiomatic HK Business English, tightly matched to Target JD. Never invent metrics.
+- Fluency: idiomatic HK Business English. Never invent employers, dates, or metrics.
 
 === PROJECTS / LEADERSHIP (critical) ===
 - Section title: "SCHOOL PROJECTS & LEADERSHIP" OR "PROJECTS & OTHER EXPERIENCES"
-- EACH project / leadership entry: EXACTLY 1 bullet only — the single strongest outcome / leadership result.
-- Merge any secondary duties into that one high-impact line.
-- cv-left = name; cv-right = date range (REQUIRED — never leave empty); cv-role = identity
-- For "Sustainable Architectural Design in Hong Kong", use dates e.g. "Sept 2025 - Dec 2025" if present in the library (or the library period).
+- Header: "Project/Org Name <span class=\"cv-role-inline\">| Identity</span>" + dates on cv-right
+- EACH entry: EXACTLY 1 bullet — strongest JD-aligned outcome
+- For "Sustainable Architectural Design in Hong Kong", dates e.g. "Sept 2025 - Dec 2025"
 
 === Education ===
 - cv-left = school; cv-right = dates

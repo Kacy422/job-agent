@@ -33,6 +33,7 @@ import { PageHeader } from "@/components/PageHeader";
 import {
   DEFAULT_CV_SKILLS,
   ensureSkillsSection,
+  mergeCompanyRoleInline,
 } from "@/lib/cv-template";
 import {
   exportHtmlPdf,
@@ -100,8 +101,12 @@ export function ResumeGenerator() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [revisionNotes, setRevisionNotes] = useState("");
   const [loadingRefine, setLoadingRefine] = useState(false);
+  const [refineStatus, setRefineStatus] = useState("");
+  /** Completed generation rounds; refine always uses round = cvRevisionRound + 1 */
+  const [cvRevisionRound, setCvRevisionRound] = useState(0);
   const [cvHighlights, setCvHighlights] = useState<CvHighlight[]>([]);
   const exportRef = useRef<HTMLDivElement>(null);
+  const refineAbortRef = useRef<AbortController | null>(null);
   const clearingRef = useRef(false);
   const urlParseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Skip path-B exclusivity while auto-filling JD from URL parse */
@@ -130,6 +135,9 @@ export function ResumeGenerator() {
     setCvHighlights([]);
     setShowRationale(false);
     setCvEpoch((n) => n + 1);
+    setCvRevisionRound(0);
+    setRevisionNotes("");
+    setRefineStatus("");
     setGenerationSourceKey(null);
     setParseHint("");
     setTimeout(() => {
@@ -476,13 +484,16 @@ export function ResumeGenerator() {
     rationale?: unknown;
     rationaleList?: unknown;
     highlights?: Partial<CvHighlight>[];
+    revisionRound?: number;
   }) {
     const rationaleNext = normalizeCvRationale(
       data.rationale ?? data.rationaleList
     );
-    const rawHtml = ensureSkillsSection(
-      String(data.tailoredResumeHtml || "").trim(),
-      skillsOverrides()
+    const rawHtml = mergeCompanyRoleInline(
+      ensureSkillsSection(
+        String(data.tailoredResumeHtml || "").trim(),
+        skillsOverrides()
+      )
     );
     if (!rawHtml) {
       throw new Error("未返回有效 CV HTML");
@@ -492,14 +503,77 @@ export function ResumeGenerator() {
       rationaleNext,
       data.highlights
     );
-    const highlighted = applyHighlightsToHtml(rawHtml, highlights);
-    setCvHighlights(highlights);
+    const { html: highlighted, applied } = applyHighlightsToHtml(
+      rawHtml,
+      highlights
+    );
+    setCvHighlights(applied);
     setResumeHtml(highlighted);
+    // Clean baseline for next incremental round (no marks)
     setTailoredResume(stripReviewMarks(rawHtml));
     setRationale(rationaleNext);
+    if (typeof data.revisionRound === "number" && data.revisionRound > 0) {
+      setCvRevisionRound(data.revisionRound);
+    }
     bindGenerationSource();
     setShowRationale(true);
     setCvEpoch((n) => n + 1);
+  }
+
+  /** Prefer live editor (user edits) → clean tailoredResume → highlighted resumeHtml */
+  function latestCleanCvHtml(): string {
+    const live = exportRef.current?.innerHTML?.trim() || "";
+    const candidate =
+      live.includes("cv-sheet")
+        ? live
+        : tailoredResume?.includes("cv-sheet")
+          ? tailoredResume
+          : resumeHtml || tailoredResume || "";
+    return stripReviewMarks(candidate).trim();
+  }
+
+  async function fetchGenerateResume(
+    body: Record<string, unknown>,
+    opts?: { signal?: AbortSignal; retries?: number }
+  ) {
+    const retries = opts?.retries ?? 1;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        if (attempt > 0) {
+          setRefineStatus(`请求超时，正在重试（${attempt}/${retries}）…`);
+        }
+        const res = await fetch("/api/generate-resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: opts?.signal,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = String(data.error || "生成失败");
+          // Retry on gateway timeout
+          if (
+            (res.status === 504 || /超时|timeout/i.test(msg)) &&
+            attempt < retries
+          ) {
+            lastErr = new Error(msg);
+            continue;
+          }
+          throw new Error(msg);
+        }
+        return data;
+      } catch (e) {
+        lastErr = e;
+        if (opts?.signal?.aborted) throw e;
+        const isAbort =
+          e instanceof Error &&
+          (e.name === "AbortError" || /aborted|timeout/i.test(e.message));
+        if (isAbort && attempt < retries) continue;
+        if (attempt >= retries) throw e;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("生成失败");
   }
 
   async function rewriteCv() {
@@ -513,17 +587,16 @@ export function ResumeGenerator() {
     }
     setLoadingCv(true);
     setError("");
+    setRefineStatus("");
     try {
       const resolved = await resolveJd();
-      const res = await fetch("/api/generate-resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jd: resolved.jd, resume: fullExperience }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "生成失败");
-      await applyCvResult(data);
+      const data = await fetchGenerateResume(
+        { jd: resolved.jd, resume: fullExperience, revisionRound: 1 },
+        { retries: 1 }
+      );
+      await applyCvResult({ ...data, revisionRound: 1 });
       setRevisionNotes("");
+      setCvRevisionRound(1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "生成失败");
     } finally {
@@ -544,32 +617,54 @@ export function ResumeGenerator() {
       setError("请先在「人物画像」填写结构化经历");
       return;
     }
+
+    refineAbortRef.current?.abort();
+    const controller = new AbortController();
+    refineAbortRef.current = controller;
+    // Client-side hard timeout (slightly above server DeepSeek timeout)
+    const timeoutId = setTimeout(() => controller.abort(), 160_000);
+
+    const nextRound = Math.max(2, cvRevisionRound + 1);
     setLoadingRefine(true);
     setError("");
+    setRefineStatus(`第 ${nextRound} 轮优化中，请稍候…`);
+
     try {
       const resolved = await resolveJd();
-      const current =
-        exportRef.current?.innerHTML?.trim() ||
-        resumeHtml ||
-        tailoredResume ||
-        "";
-      const res = await fetch("/api/generate-resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const current = latestCleanCvHtml();
+      if (!current.includes("cv-sheet") && current.length < 80) {
+        throw new Error("无法读取上一版 CV，请先重新生成初稿");
+      }
+
+      const data = await fetchGenerateResume(
+        {
           jd: resolved.jd,
           resume: fullExperience,
           currentCvHtml: current,
           revisionNotes: revisionNotes.trim(),
-        }),
+          revisionRound: nextRound,
+        },
+        { signal: controller.signal, retries: 1 }
+      );
+      await applyCvResult({
+        ...data,
+        revisionRound: Number(data.revisionRound) || nextRound,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "重新优化失败");
-      await applyCvResult(data);
+      setRevisionNotes("");
+      setRefineStatus(`第 ${nextRound} 轮已完成，可继续叠加修改`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "重新优化失败");
+      if (controller.signal.aborted) {
+        setError("请求超时或已取消，请重试（将基于当前最新 CV 继续）");
+      } else {
+        setError(e instanceof Error ? e.message : "重新优化失败");
+      }
+      setRefineStatus("");
     } finally {
+      clearTimeout(timeoutId);
       setLoadingRefine(false);
+      if (refineAbortRef.current === controller) {
+        refineAbortRef.current = null;
+      }
     }
   }
 
@@ -719,7 +814,7 @@ export function ResumeGenerator() {
       resumeHtml.trim() ||
       tailoredResume ||
       "";
-    return stripReviewMarks(raw);
+    return mergeCompanyRoleInline(stripReviewMarks(raw));
   }
 
   function exportCvPdf() {
@@ -1154,15 +1249,21 @@ export function ResumeGenerator() {
                       手动添加修改需求
                     </h4>
                     <p className="mb-2 text-[11px] text-slate-500">
-                      二次优化后再刷新批注
+                      基于第 {Math.max(1, cvRevisionRound)} 轮结果继续叠加修改，无次数上限
                     </p>
                     <textarea
                       value={revisionNotes}
                       onChange={(e) => setRevisionNotes(e.target.value)}
                       rows={3}
+                      disabled={loadingRefine}
                       placeholder="例如：强调 GIS 数据分析；语言更偏商务…"
-                      className="soft-textarea mb-2 w-full p-2.5 text-xs"
+                      className="soft-textarea mb-2 w-full p-2.5 text-xs disabled:opacity-60"
                     />
+                    {refineStatus && (
+                      <p className="mb-2 text-[11px] text-emerald-700">
+                        {refineStatus}
+                      </p>
+                    )}
                     <button
                       type="button"
                       onClick={refineCv}
@@ -1174,7 +1275,9 @@ export function ResumeGenerator() {
                       ) : (
                         <RefreshCw className="h-4 w-4" />
                       )}
-                      重新优化 CV
+                      {loadingRefine
+                        ? `第 ${Math.max(2, cvRevisionRound + 1)} 轮优化中…`
+                        : "重新优化 CV"}
                     </button>
                   </div>
                 </aside>

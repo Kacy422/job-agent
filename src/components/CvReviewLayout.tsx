@@ -52,7 +52,17 @@ export function stripReviewMarks(html: string) {
     .replace(/\sdata-hl-kind="[^"]*"/gi, "");
 }
 
-/** Build highlights from rationale + optional API highlights */
+/** Snap phrase casing to the exact substring present in HTML text */
+export function snapPhraseToHtml(html: string, phrase: string): string | null {
+  const plain = stripReviewMarks(html).replace(/<[^>]+>/g, " ");
+  const needle = phrase.trim();
+  if (needle.length < 2) return null;
+  const idx = plain.toLowerCase().indexOf(needle.toLowerCase());
+  if (idx < 0) return null;
+  return plain.slice(idx, idx + needle.length);
+}
+
+/** Build highlights from rationale + optional API highlights — phrases MUST exist in HTML */
 export function buildHighlights(
   html: string,
   rationale: CvRationale,
@@ -60,13 +70,26 @@ export function buildHighlights(
 ): CvHighlight[] {
   const plain = stripReviewMarks(html);
   const out: CvHighlight[] = [];
+  const seen = new Set<string>();
+
+  const push = (h: CvHighlight) => {
+    if (h.kind === "removed") {
+      out.push(h);
+      return;
+    }
+    const snapped = snapPhraseToHtml(plain, h.phrase);
+    if (!snapped) return;
+    const key = snapped.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...h, phrase: snapped });
+  };
 
   if (Array.isArray(apiHighlights) && apiHighlights.length) {
     apiHighlights.forEach((h, i) => {
       const phrase = String(h.phrase || "").trim();
       if (phrase.length < 2) return;
-      if (!plain.toLowerCase().includes(phrase.toLowerCase())) return;
-      out.push({
+      push({
         id: String(h.id || `h${i}`),
         kind: (h.kind as CvHighlight["kind"]) || "added",
         phrase,
@@ -76,11 +99,11 @@ export function buildHighlights(
     });
   }
 
-  if (out.length === 0) {
+  if (out.filter((h) => h.kind !== "removed").length === 0) {
     rationale.added.forEach((item, i) => {
       const phrase = findBestPhrase(plain, item.text);
       if (!phrase) return;
-      out.push({
+      push({
         id: `add-${i}`,
         kind: "added",
         phrase,
@@ -106,34 +129,45 @@ export function buildHighlights(
 function findBestPhrase(html: string, hint: string): string | null {
   const clean = hint.trim();
   if (clean.length < 2) return null;
-  // Prefer English tokens from hint for matching CV body
   const eng = clean.match(/[A-Za-z][A-Za-z0-9+./%&\-\s]{2,}/g);
   if (eng) {
     for (const cand of eng.sort((a, b) => b.length - a.length)) {
       const t = cand.trim();
-      if (t.length >= 3 && html.toLowerCase().includes(t.toLowerCase())) {
-        return t;
-      }
+      const snapped = snapPhraseToHtml(html, t);
+      if (t.length >= 3 && snapped) return snapped;
     }
   }
-  if (html.toLowerCase().includes(clean.toLowerCase())) return clean;
-  // Try first 40 chars of hint as substring search of words in HTML text
-  const textOnly = html.replace(/<[^>]+>/g, " ");
+  const direct = snapPhraseToHtml(html, clean);
+  if (direct) return direct;
   const words = clean.split(/[\s,，、/|]+/).filter((w) => w.length >= 4);
   for (const w of words) {
-    if (textOnly.toLowerCase().includes(w.toLowerCase())) return w;
+    const snapped = snapPhraseToHtml(html, w);
+    if (snapped) return snapped;
   }
   return null;
 }
 
+/**
+ * Apply marks only for phrases that exist in the CV body.
+ * Returns highlighted HTML + the subset of highlights that were actually marked
+ * (plus removed-only comments).
+ */
 export function applyHighlightsToHtml(
   html: string,
   highlights: CvHighlight[]
-): string {
+): { html: string; applied: CvHighlight[] } {
   let out = stripReviewMarks(html);
+  const applied: CvHighlight[] = [];
+
   for (const h of highlights) {
-    if (!h.phrase || h.kind === "removed") continue;
-    const escaped = h.phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (h.kind === "removed") {
+      applied.push(h);
+      continue;
+    }
+    if (!h.phrase) continue;
+    const snapped = snapPhraseToHtml(out, h.phrase);
+    if (!snapped) continue;
+    const escaped = snapped.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     try {
       const re = new RegExp(`(${escaped})`, "i");
       if (!re.test(out)) continue;
@@ -143,11 +177,14 @@ export function applyHighlightsToHtml(
         re,
         `<mark class="cv-hl ${kindClass}" data-comment-id="${h.id}">$1</mark>`
       );
+      if (out.includes(`data-comment-id="${h.id}"`)) {
+        applied.push({ ...h, phrase: snapped });
+      }
     } catch {
       /* ignore */
     }
   }
-  return out;
+  return { html: out, applied };
 }
 
 type Line = { x1: number; y1: number; x2: number; y2: number; kind: string };

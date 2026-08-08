@@ -6,6 +6,7 @@ import {
   enforceOneProjectBullet,
   enforceTwoInternshipBullets,
   ensureSkillsSection,
+  mergeCompanyRoleInline,
 } from "@/lib/cv-template";
 import { coursePoolPromptBlock } from "@/lib/course-pool";
 import {
@@ -27,6 +28,7 @@ export type RewriteResult = {
   rationale: CvRationale;
   rationaleList?: string[];
   highlights?: CvApiHighlight[];
+  revisionRound?: number;
   demo?: boolean;
 };
 
@@ -35,8 +37,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const jd = String(body.jd || "").trim();
     const resume = String(body.resume || "").trim();
-    const currentCvHtml = String(body.currentCvHtml || "").trim();
+    const currentCvHtml = String(body.currentCvHtml || "")
+      .replace(/<\/?mark\b[^>]*>/gi, "")
+      .trim();
     const revisionNotes = String(body.revisionNotes || "").trim();
+    const revisionRound = Math.max(
+      1,
+      Number(body.revisionRound) || (currentCvHtml && revisionNotes ? 2 : 1)
+    );
 
     if (!jd || !resume) {
       return NextResponse.json(
@@ -54,26 +62,23 @@ export async function POST(req: Request) {
             role: "system",
             content: `You are an expert CV rewriter for the Hong Kong job market (MNC / local professional firms).
 
-=== STEP A — JD ANALYSIS (do this first, mentally; do not output it) ===
-From the Target JD, extract:
-1) Hard skills / tools / domain keywords (e.g. GIS, ESG, Python, stakeholder engagement)
-2) Soft skills / competencies (communication, cross-cultural, analytical rigor)
-3) Role pain points / must-haves (what the hiring manager needs solved)
-4) Preferred seniority / education signals
+=== STEP A — JD × PROFILE MATCHING (mandatory) ===
+From the Target JD, extract hard skills, soft skills, pain points, and seniority signals.
+Then scan the Full Experience Library (Profile Data) and SELECT / REWRITE only experiences that map to those JD keywords.
+Every internship bullet MUST echo at least one concrete JD keyword or pain point (tools, domains, stakeholders, deliverables).
+Never invent employers, degrees, dates, or metrics not grounded in the library.
 
-=== STEP B — GROUNDED STAR REWRITE ===
-Rewrite ONLY using facts from the candidate's Full Experience Library.
-- Map library material to JD keywords / pain points (rephrase & prioritise; never invent employers, degrees, dates, or metrics).
-- MERGE similar / fragmented duties into clear themes — ban laundry-list micro-bullets.
-- Internship / Work: EXACTLY 2 core STAR bullets per entry (Verb + Task + Tools + Impact); merge fragmented duties.
-- Projects / Leadership: EXACTLY 1 high-impact bullet per entry; always fill cv-right dates (e.g. Sept 2025 - Dec 2025 for Sustainable Architectural Design in Hong Kong).
-- Fluency: idiomatic, coherent Professional Resume English tightly matched to the Target JD.
-- Fill one A4 page evenly — avoid large empty gaps and avoid page-2 overflow.
+=== STEP B — STAR REWRITE ===
+- Internship / Work: EXACTLY 2 STAR bullets (Verb + Task + Tools + Impact), JD-aligned.
+- Projects / Leadership: EXACTLY 1 high-impact bullet; dates required on cv-right.
+- Header format (SAME LINE): Company/Project <span class="cv-role-inline">| Role</span>
+  Example: Crossroads Foundation, Hong Kong <span class="cv-role-inline">| Engagement Department Intern</span>
+- Fill one A4 page evenly; no sparse one-liners; no page-2 overflow.
 
 LANGUAGE RULE (MANDATORY):
-- Final tailoredResumeHtml MUST be Professional Resume English for Hong Kong applications (no Chinese characters in the HTML).
-- If the Full Experience Library, JD, or revision notes contain Chinese: NEVER discard those facts. First translate them accurately into idiomatic Professional Resume English, then weave the meaning into bullets / education / skills fields.
-- rationale: Simplified Chinese only (internal notes).
+- tailoredResumeHtml: Professional Resume English only (no Chinese characters).
+- Chinese in library / notes → translate accurately into English and KEEP the facts.
+- rationale + highlight labels/reasons: Simplified Chinese only.
 
 Output STRICT JSON only (no markdown fences):
 {
@@ -83,52 +88,48 @@ Output STRICT JSON only (no markdown fences):
     "removed": [{"text":"删减的内容","reason":"简明原因"}]
   },
   "highlights": [
-    {"id":"h1","kind":"added","phrase":"exact English substring copied from tailoredResumeHtml","label":"中文简述","reason":"简明原因"},
-    {"id":"h2","kind":"changed","phrase":"another exact English phrase from the HTML","label":"中文简述","reason":"简明原因"}
+    {"id":"h1","kind":"added","phrase":"EXACT substring copied from tailoredResumeHtml","label":"中文简述","reason":"简明原因"},
+    {"id":"h2","kind":"changed","phrase":"another EXACT substring from the HTML","label":"中文简述","reason":"简明原因"}
   ]
 }
 
+CRITICAL HIGHLIGHT RULE:
+- Each highlights[].phrase MUST appear character-for-character (case-insensitive OK) inside the FINAL tailoredResumeHtml you output.
+- Prefer distinctive 6–18 word English snippets from the new bullets you just wrote.
+- If you cannot find a real substring, omit that highlight — NEVER invent a phrase absent from the HTML.
+
 === HTML layout ===
 ${CV_HTML_SCHEMA_HINT}
-Prefer sections: EDUCATION, INTERNSHIP EXPERIENCE, then SCHOOL PROJECTS & LEADERSHIP or PROJECTS & OTHER EXPERIENCES, then SKILLS.
-SKILLS MUST include Software / Language / Certificate with bold labels ONLY and normal-weight values, e.g.
-<p class="cv-skills-line"><strong>Certificate:</strong> BEAM Affiliate; CFA - ESG</p>
-(spell Certificate correctly — never "Ceitificate").
-Internship: EXACTLY 2 STAR bullets (Verb + Task + Tools + Impact).
-Projects/Leadership: EXACTLY 1 bullet per entry; always include a date on cv-right (e.g. Sustainable Architectural Design in Hong Kong → Sept 2025 - Dec 2025).
-HKU degree line MUST include inline GPA: "MSc … | GPA: X.X/Y.Y".
-Chinese source text → translate to English and KEEP the facts.
-
 ${coursePoolPromptBlock()}
 
 === rationale (Simplified Chinese only) ===
-- added【增加】: 1–3 items {text, reason} — new JD keywords / metrics / stronger verbs you emphasised.
-- removed【减少】: 1–2 items {text, reason} — what you cut as low relevance.
-Keep ultra-concise. No English / Traditional Chinese in rationale.
-
-=== highlights (for Word-style review UI) ===
-- 2–4 items. Each "phrase" MUST be copied VERBATIM from tailoredResumeHtml (English text that appears in the CV body).
-- kind: "added" | "changed" only (do not invent phrases that are absent from the HTML).
-- label + reason: Simplified Chinese.
+- added: 1–3 items; removed: 1–2 items. Ultra-concise.
 
 ${
   isRevision
-    ? `=== REVISION MODE ===
-You are refining an EXISTING tailored CV. Respect the current HTML structure/classes.
-Apply the user's revision notes precisely while staying grounded in the experience library and JD.
-Do not discard strong JD alignment already present unless the notes require it.
-If revision notes are in Chinese, translate the intent into English CV edits — never ignore Chinese notes.`
+    ? `=== INCREMENTAL REVISION MODE (round ${revisionRound}) ===
+BASE INPUT = the "Current Tailored CV HTML" below (this is the LATEST accepted version after round ${revisionRound - 1}).
+You MUST:
+1) Start from that HTML — do not regenerate from scratch unless notes require a full rewrite.
+2) Apply User Revision Notes precisely; keep all strong JD alignment unless notes override it.
+3) Output a complete updated tailoredResumeHtml reflecting ONLY the requested deltas plus preserved prior content.
+4) highlights.phrase must come from the NEW output HTML (post-edit), not from the old CV.
+If notes are Chinese, translate intent into English CV edits — never ignore them.`
     : ""
 }`,
           },
           {
             role: "user",
             content: isRevision
-              ? `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library】\n${resume.slice(0, 7000)}\n\n【Current Tailored CV HTML】\n${currentCvHtml.slice(0, 12000)}\n\n【User Revision Notes】\n${revisionNotes.slice(0, 2000)}`
-              : `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library】\n${resume.slice(0, 9000)}`,
+              ? `【Revision Round】${revisionRound}\n\n【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library / Profile Data】\n${resume.slice(0, 8000)}\n\n【Current Tailored CV HTML — BASELINE FOR THIS ROUND】\n${currentCvHtml.slice(0, 14000)}\n\n【User Revision Notes — apply on top of baseline】\n${revisionNotes.slice(0, 2500)}`
+              : `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library / Profile Data】\n${resume.slice(0, 10000)}`,
           },
         ],
-        { json: true, temperature: isRevision ? 0.3 : 0.35 }
+        {
+          json: true,
+          temperature: isRevision ? 0.25 : 0.35,
+          timeoutMs: isRevision ? 150_000 : 120_000,
+        }
       );
 
       const parsed = extractJson<{
@@ -142,7 +143,7 @@ If revision notes are in Chinese, translate the intent into English CV edits —
       const rationale = ensureRationale(
         normalizeCvRationale(parsed.rationale ?? parsed.rationaleList)
       );
-      const highlights = normalizeHighlights(parsed.highlights, html);
+      const highlights = normalizeHighlights(parsed.highlights, html, rationale);
 
       if (!html) {
         return NextResponse.json(
@@ -156,6 +157,7 @@ If revision notes are in Chinese, translate the intent into English CV edits —
         rationale,
         rationaleList: flattenRationale(rationale),
         highlights,
+        revisionRound,
       } satisfies RewriteResult);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -174,24 +176,35 @@ If revision notes are in Chinese, translate the intent into English CV edits —
             },
           ],
         };
-        const demoHtml = currentCvHtml || buildFallbackCvHtml();
+        const demoHtml = normalizeHtml(currentCvHtml || buildFallbackCvHtml());
         return NextResponse.json({
           tailoredResumeHtml: demoHtml,
           rationale: demoRationale,
           rationaleList: flattenRationale(demoRationale),
-          highlights: [
-            {
-              id: "h1",
-              kind: "added",
-              phrase: "ESG",
-              label: "ESG / 气候韧性关键词",
-              reason: "演示模式示意匹配 JD",
-            },
-          ],
+          highlights: normalizeHighlights(
+            [
+              {
+                id: "h1",
+                kind: "added",
+                phrase: "ESG",
+                label: "ESG / 气候韧性关键词",
+                reason: "演示模式示意匹配 JD",
+              },
+            ],
+            demoHtml,
+            demoRationale
+          ),
+          revisionRound,
           demo: true,
         } satisfies RewriteResult);
       }
       console.error("[generate-resume]", err);
+      if (message === "DEEPSEEK_TIMEOUT") {
+        return NextResponse.json(
+          { error: "生成超时，请点击重试（将基于上一版 CV 继续）" },
+          { status: 504 }
+        );
+      }
       return NextResponse.json(
         { error: "生成失败，请稍后重试或检查 API Key" },
         { status: 500 }
@@ -202,26 +215,91 @@ If revision notes are in Chinese, translate the intent into English CV edits —
   }
 }
 
+/** Snap phrase to the exact casing substring present in HTML */
+function snapPhraseToHtml(html: string, phrase: string): string | null {
+  const plain = html.replace(/<[^>]+>/g, " ");
+  const idx = plain.toLowerCase().indexOf(phrase.toLowerCase());
+  if (idx < 0) return null;
+  return plain.slice(idx, idx + phrase.length);
+}
+
+function findEnglishSnippet(html: string, hint: string): string | null {
+  const plain = html.replace(/<[^>]+>/g, " ");
+  const eng = hint.match(/[A-Za-z][A-Za-z0-9+./%&\-\s]{3,}/g);
+  if (eng) {
+    for (const cand of eng.sort((a, b) => b.length - a.length)) {
+      const t = cand.trim();
+      if (t.length >= 4 && plain.toLowerCase().includes(t.toLowerCase())) {
+        return snapPhraseToHtml(html, t);
+      }
+    }
+  }
+  return snapPhraseToHtml(html, hint.trim());
+}
+
 function normalizeHighlights(
   raw: CvApiHighlight[] | undefined,
-  html: string
+  html: string,
+  rationale?: CvRationale
 ): CvApiHighlight[] {
-  if (!Array.isArray(raw)) return [];
-  const plain = html.replace(/<[^>]+>/g, " ");
-  return raw
-    .map((h, i) => {
-      const phrase = String(h?.phrase || "").trim();
-      if (phrase.length < 2) return null;
-      if (!plain.toLowerCase().includes(phrase.toLowerCase())) return null;
-      return {
-        id: String(h?.id || `h${i + 1}`),
-        kind: h?.kind === "changed" ? "changed" : "added",
+  const out: CvApiHighlight[] = [];
+  const seen = new Set<string>();
+
+  const push = (h: CvApiHighlight) => {
+    const phrase = String(h.phrase || "").trim();
+    if (phrase.length < 3) return;
+    const snapped = snapPhraseToHtml(html, phrase);
+    if (!snapped) return;
+    const key = snapped.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      id: String(h.id || `h${out.length + 1}`),
+      kind: h.kind === "changed" ? "changed" : "added",
+      phrase: snapped,
+      label: String(h.label || "").trim() || snapped.slice(0, 48),
+      reason: String(h.reason || "").trim(),
+    });
+  };
+
+  if (Array.isArray(raw)) {
+    raw.forEach((h, i) =>
+      push({ ...h, id: h.id || `h${i + 1}` })
+    );
+  }
+
+  if (out.length === 0 && rationale) {
+    rationale.added.forEach((item, i) => {
+      const phrase = findEnglishSnippet(html, item.text);
+      if (!phrase) return;
+      push({
+        id: `add-${i}`,
+        kind: "added",
         phrase,
-        label: String(h?.label || "").trim(),
-        reason: String(h?.reason || "").trim(),
-      } satisfies CvApiHighlight;
-    })
-    .filter(Boolean) as CvApiHighlight[];
+        label: item.text,
+        reason: item.reason,
+      });
+    });
+  }
+
+  // Last resort: pick distinctive words from first internship bullets
+  if (out.length === 0) {
+    const bullets = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
+      .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
+      .filter((t) => t.length > 40);
+    bullets.slice(0, 2).forEach((b, i) => {
+      const words = b.split(/\s+/).slice(0, 10).join(" ");
+      push({
+        id: `auto-${i}`,
+        kind: "added",
+        phrase: words,
+        label: "JD 匹配要点",
+        reason: "自动对齐生成正文",
+      });
+    });
+  }
+
+  return out.slice(0, 4);
 }
 
 function ensureRationale(r: CvRationale): CvRationale {
@@ -264,7 +342,7 @@ function normalizeHtml(raw: string): string {
   html = html.replace(/\bCeitificates?\s*:/gi, "Certificate:");
   html = html.replace(/\bCe[rt]{1,2}ificates?\s*:/gi, "Certificate:");
   html = html.replace(/\bCertifications?\s*:/gi, "Certificate:");
-  // Force Software / Language / Certificate — never drop a line
+  html = mergeCompanyRoleInline(html);
   html = ensureSkillsSection(html);
   html = enforceTwoInternshipBullets(html);
   html = enforceOneProjectBullet(html);
