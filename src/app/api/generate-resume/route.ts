@@ -23,11 +23,19 @@ export type CvApiHighlight = {
   reason?: string;
 };
 
+export type RevisionAlignment = {
+  instruction: string;
+  status: "done" | "partial" | "blocked";
+  evidence: string;
+  note: string;
+};
+
 export type RewriteResult = {
   tailoredResumeHtml: string;
   rationale: CvRationale;
   rationaleList?: string[];
   highlights?: CvApiHighlight[];
+  revisionAlignments?: RevisionAlignment[];
   revisionRound?: number;
   demo?: boolean;
 };
@@ -61,46 +69,54 @@ export async function POST(req: Request) {
           {
             role: "system",
             content: `You are an expert CV rewriter for the Hong Kong job market (MNC / local professional firms).
-You MUST silently complete the following THREE steps before writing HTML. Do not skip any step. Never invent employers, degrees, dates, or metrics not grounded in the Experience Library.
+You MUST silently complete the pipeline below before writing HTML. Never invent employers, degrees, dates, or metrics not grounded in the Experience Library / Profile Data.
 
 === CAREER POSITIONING (always respect) ===
 Candidate focuses on PRACTICAL APPLICATION and ANALYSIS of ESG / sustainability principles (research, data, assessments, stakeholder engagement, reporting support, tools).
-AVOID framing experience as drafting, setting, or making regulations / policy rules / legislation. Prefer "applied ESG analysis / assessment / implementation support" over "policy formulation".
+AVOID framing experience as drafting, setting, or making regulations / policy rules / legislation.
 
-=== STEP 1 — DEEP JD DECOMPOSITION (mandatory) ===
-Carefully read the Target JD. Extract at least 5–7 core skills and duty requirements as a mental checklist, e.g.:
-- data analysis / research
-- cross-functional collaboration
-- specific software / tools
-- report writing / presentations
-- stakeholder engagement
-- project support / process improvement
-- domain keywords (ESG, climate, sustainability, etc.)
-Every later bullet must help cover this checklist — no core JD requirement left uncovered across the whole CV.
+=== STEP 1 — DEEP JD DECOMPOSITION ===
+Extract ≥5–7 core skills / duties from the Target JD (tools, soft skills, deliverables, domains).
 
-=== STEP 2 — EXPERIENCE MAPPING (mandatory) ===
-Read the Full Experience Library (original CV / profile). For EACH JD requirement from Step 1, find proof from relevant experiences (e.g. Crossroads Foundation internship, Chongqing urban greening internship, academic / leadership projects).
-Build an internal mapping draft: "JD requirement → matching experience(s) / evidence".
-Prefer mapping that highlights applied ESG analysis & outcomes, not regulatory drafting.
-Select / emphasize only library-grounded facts.
+=== STEP 2 — SEMANTIC & CONTEXTUAL MATCHING (CRITICAL — NOT literal keyword matching) ===
+FORBIDDEN: surface / literal word matching only (e.g. only keep a bullet because it contains the exact JD token).
+REQUIRED: semantic generalization + synonym / near-skill mining across the FULL Profile Data:
+- Meaning proximity (e.g. "stakeholder outreach" ≈ "partner engagement" ≈ "cross-cultural collaboration")
+- Soft-skill transfer (initiative, learning agility, communication, coordination)
+- Tool / method adjacency (GIS / ArcGIS / spatial analysis / data collection / Excel research)
+- Business-logic similarity (research→insight→recommendation; assessment→reporting; project support)
+If Profile Data has ANY experience that is close in meaning, soft skill, tool use, or business logic to a JD need, you MUST maximize extraction and fuse it into high-value STAR bullets.
+Goal: maximize JD coverage depth — prefer richer, evidence-backed bullets over sparse literal echoes.
 
-=== STEP 3 — TAILORED BULLET REWRITE (mandatory) ===
-Rewrite all internship / work / project bullets from the mapping draft:
-- Collectively COVER all Step-1 core requirements — do not omit any.
-- Each bullet MUST start with a strong Action Verb.
-- Results-oriented: fuse original quantified metrics / project outcomes from the library whenever available.
-- STAR structure: Verb + Task/Context + Tools/Methods + Impact.
-- Internship / Work: 2–4 bullets per entry (RECOMMENDED: 3); scale by source richness + JD match.
-- Projects / Leadership: EXACTLY 1 high-impact JD-aligned bullet; dates on cv-right.
-- Header (SAME LINE): Company/Project <span class="cv-role-inline">| Role</span>
-  Example: Crossroads Foundation, Hong Kong <span class="cv-role-inline">| Engagement Department Intern</span>
-- Fill one A4 page densely; no sparse one-liners; no page-2 overflow.
+=== STEP 3 — TAILORED BULLET REWRITE ===
+- Cover all Step-1 requirements via the semantic mapping (no core JD need left uncovered).
+- Strong Action Verb + Task/Context + Tools/Methods + Impact; keep library metrics.
+- Internship / Work: 2–4 bullets/entry (RECOMMENDED: 3).
+- Projects / Leadership: EXACTLY 1 bullet; dates on cv-right.
+- Header SAME LINE: Company <span class="cv-role-inline">| Role</span>
+- One dense A4 page; no page-2 overflow.
 
-LANGUAGE RULE (MANDATORY):
-- tailoredResumeHtml: Professional Resume English only (no Chinese characters).
-- Chinese in library / notes → translate accurately into English and KEEP the facts.
-- rationale + highlight labels/reasons: Simplified Chinese only.
-- In rationale.added, briefly mention which JD requirements were covered (ultra-concise).
+LANGUAGE:
+- tailoredResumeHtml: Professional Resume English only.
+- Chinese source → translate accurately; keep facts.
+- rationale / highlight labels / revisionAlignments.note: Simplified Chinese.
+
+${
+  isRevision
+    ? `=== COMMAND EXECUTION AGENT MODE (revision round ${revisionRound}) — HIGHEST PRIORITY ===
+You are a Command Execution Agent, NOT a free rewriter.
+BASE = Current Tailored CV HTML (latest accepted version). Start from it; do not ignore prior content.
+Parse User Revision Notes into an ordered checklist of ATOMIC commands (split by newlines / ； / ; / numbered lists).
+For EVERY command you MUST:
+1) Execute it precisely on the CV (edit the relevant bullets / sections).
+2) NEVER skip, drop, or vaguely "summarize away" a command.
+3) If a command cannot be fully done without inventing facts, do the maximum library-grounded partial edit and mark status "partial" or "blocked" with an honest note — still attempt nearby semantic evidence from Profile Data.
+4) After edits, output revisionAlignments[] with ONE entry per command, in the same order as parsed commands.
+Each alignment MUST include evidence = an EXACT English substring from the NEW tailoredResumeHtml proving the edit landed (or "" if blocked).
+100% of user instructions must appear in revisionAlignments. highlights.phrase must come from the NEW HTML.
+Also keep JD semantic coverage unless a command explicitly overrides it.`
+    : ""
+}
 
 Output STRICT JSON only (no markdown fences):
 {
@@ -110,69 +126,62 @@ Output STRICT JSON only (no markdown fences):
     "removed": [{"text":"删减的内容","reason":"简明原因"}]
   },
   "highlights": [
-    {"id":"h1","kind":"added","phrase":"EXACT substring copied from tailoredResumeHtml","label":"中文简述","reason":"简明原因"},
-    {"id":"h2","kind":"changed","phrase":"another EXACT substring from the HTML","label":"中文简述","reason":"简明原因"}
-  ]
+    {"id":"h1","kind":"added","phrase":"EXACT substring from tailoredResumeHtml","label":"中文简述","reason":"简明原因"}
+  ]${
+    isRevision
+      ? `,
+  "revisionAlignments": [
+    {"instruction":"用户原指令原文","status":"done","evidence":"EXACT English snippet from new HTML","note":"如何落地的中文说明"}
+  ]`
+      : ""
+  }
 }
 
-CRITICAL HIGHLIGHT RULE:
-- Each highlights[].phrase MUST appear character-for-character (case-insensitive OK) inside the FINAL tailoredResumeHtml you output.
-- Prefer distinctive 6–18 word English snippets from the new bullets you just wrote.
-- If you cannot find a real substring, omit that highlight — NEVER invent a phrase absent from the HTML.
+HIGHLIGHT RULE: phrase must exist in final HTML; omit if not found.
 
 === HTML layout ===
 ${CV_HTML_SCHEMA_HINT}
 ${coursePoolPromptBlock()}
 
-=== rationale (Simplified Chinese only) ===
-- added: 1–3 items; removed: 1–2 items. Ultra-concise.
-
-${
-  isRevision
-    ? `=== INCREMENTAL REVISION MODE (round ${revisionRound}) ===
-BASE INPUT = the "Current Tailored CV HTML" below (this is the LATEST accepted version after round ${revisionRound - 1}).
-You MUST:
-1) Start from that HTML — do not regenerate from scratch unless notes require a full rewrite.
-2) Re-run Steps 1–3 lightly: keep JD coverage; apply User Revision Notes on top of the baseline.
-3) Output a complete updated tailoredResumeHtml reflecting ONLY the requested deltas plus preserved prior content.
-4) highlights.phrase must come from the NEW output HTML (post-edit), not from the old CV.
-If notes are Chinese, translate intent into English CV edits — never ignore them.`
-    : ""
-}`,
+=== rationale ===
+- added: 1–3; removed: 1–2. Ultra-concise Simplified Chinese.`,
           },
           {
             role: "user",
             content: isRevision
               ? `【Revision Round】${revisionRound}
 
-请先按系统提示完成：①深度拆解 JD（≥5–7 项核心要求）②经历映射（JD要求→履历证据）③逐条定制改写 Bullet Points（强动词开头、结果导向、全面覆盖 JD 核心要求；侧重 ESG 实际应用与分析，避免法规制定表述）。
+你是 Command Execution Agent：必须逐条执行下方每一条修改指令，不得遗漏。
+同时继续做语义级 JD×履历匹配（禁止纯字面匹配），最大化提取 Profile Data 中相近经历。
 
 【Target JD】
 ${jd.slice(0, 5500)}
 
-【Full Experience Library / Profile Data — 原版履历】
+【Full Experience Library / Profile Data】
 ${resume.slice(0, 8000)}
 
-【Current Tailored CV HTML — BASELINE FOR THIS ROUND】
+【Current Tailored CV HTML — BASELINE】
 ${currentCvHtml.slice(0, 14000)}
 
-【User Revision Notes — apply on top of baseline】
-${revisionNotes.slice(0, 2500)}`
-              : `请严格按三步法完成定制 CV（只输出最终 JSON，不要输出中间草稿）：
-① 深度拆解 JD：提取至少 5–7 个核心技能与职责要求；
-② 经历映射：对每项要求在原版履历中找证据（Crossroads / 重庆相关实习 / 学术与领导力项目等），并偏向 ESG 原则的实际应用与分析（非制定法规）；
-③ 逐条改写 Bullet Points：全面覆盖①中全部要求；每条以强动作动词开头；结果导向并融合原有量化数据/成果。
+【User Revision Commands — EXECUTE EACH ONE】
+${revisionNotes.slice(0, 2500)}
+
+完成后 JSON 必须包含 revisionAlignments，与上述指令一一对应。`
+              : `请按三步法定制 CV（只输出最终 JSON）：
+① 深度拆解 JD（≥5–7 核心要求）；
+② 语义/同义/软技能/工具/业务逻辑级匹配 Profile Data（禁止表面字面匹配；最大化提取相近经历）；
+③ 逐条改写 STAR bullets，全面覆盖 JD；强动词；融合量化成果；侧重 ESG 实际应用与分析。
 
 【Target JD】
 ${jd.slice(0, 5500)}
 
-【Full Experience Library / Profile Data — 原版履历】
+【Full Experience Library / Profile Data】
 ${resume.slice(0, 10000)}`,
           },
         ],
         {
           json: true,
-          temperature: isRevision ? 0.25 : 0.35,
+          temperature: isRevision ? 0.2 : 0.35,
           timeoutMs: isRevision ? 150_000 : 120_000,
         }
       );
@@ -182,6 +191,7 @@ ${resume.slice(0, 10000)}`,
         rationale?: unknown;
         rationaleList?: unknown;
         highlights?: CvApiHighlight[];
+        revisionAlignments?: RevisionAlignment[];
       }>(content);
 
       const html = normalizeHtml(parsed.tailoredResumeHtml || "");
@@ -189,6 +199,13 @@ ${resume.slice(0, 10000)}`,
         normalizeCvRationale(parsed.rationale ?? parsed.rationaleList)
       );
       const highlights = normalizeHighlights(parsed.highlights, html, rationale);
+      const revisionAlignments = isRevision
+        ? normalizeRevisionAlignments(
+            parsed.revisionAlignments,
+            revisionNotes,
+            html
+          )
+        : undefined;
 
       if (!html) {
         return NextResponse.json(
@@ -202,6 +219,7 @@ ${resume.slice(0, 10000)}`,
         rationale,
         rationaleList: flattenRationale(rationale),
         highlights,
+        revisionAlignments,
         revisionRound,
       } satisfies RewriteResult);
     } catch (err) {
@@ -239,6 +257,9 @@ ${resume.slice(0, 10000)}`,
             demoHtml,
             demoRationale
           ),
+          revisionAlignments: isRevision
+            ? normalizeRevisionAlignments(undefined, revisionNotes, demoHtml)
+            : undefined,
           revisionRound,
           demo: true,
         } satisfies RewriteResult);
@@ -258,6 +279,44 @@ ${resume.slice(0, 10000)}`,
   } catch {
     return NextResponse.json({ error: "请求格式错误" }, { status: 400 });
   }
+}
+
+function splitRevisionCommands(notes: string): string[] {
+  return notes
+    .split(/\n+|；|;|。(?=\S)|(?<=\d)[.)、]\s*/)
+    .map((s) => s.replace(/^\s*[-•*\d.)、]+\s*/, "").trim())
+    .filter((s) => s.length >= 2);
+}
+
+function normalizeRevisionAlignments(
+  raw: RevisionAlignment[] | undefined,
+  notes: string,
+  html: string
+): RevisionAlignment[] {
+  const cmds = splitRevisionCommands(notes);
+  const list = Array.isArray(raw) ? raw : [];
+  if (cmds.length === 0) return [];
+
+  return cmds.map((instruction, i) => {
+    const hit = list[i];
+    const evidence = String(hit?.evidence || "").trim();
+    const snapped = evidence ? snapPhraseToHtml(html, evidence) : null;
+    let status: RevisionAlignment["status"] =
+      hit?.status === "partial" || hit?.status === "blocked"
+        ? hit.status
+        : "done";
+    if (status === "done" && !snapped) {
+      status = evidence ? "partial" : "partial";
+    }
+    return {
+      instruction,
+      status,
+      evidence: snapped || evidence,
+      note:
+        String(hit?.note || "").trim() ||
+        (status === "done" ? "已对齐执行" : "已尝试执行，请核对正文"),
+    };
+  });
 }
 
 /** Snap phrase to the exact casing substring present in HTML */
@@ -308,9 +367,7 @@ function normalizeHighlights(
   };
 
   if (Array.isArray(raw)) {
-    raw.forEach((h, i) =>
-      push({ ...h, id: h.id || `h${i + 1}` })
-    );
+    raw.forEach((h, i) => push({ ...h, id: h.id || `h${i + 1}` }));
   }
 
   if (out.length === 0 && rationale) {
@@ -327,7 +384,6 @@ function normalizeHighlights(
     });
   }
 
-  // Last resort: pick distinctive words from first internship bullets
   if (out.length === 0) {
     const bullets = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)]
       .map((m) => m[1].replace(/<[^>]+>/g, "").trim())

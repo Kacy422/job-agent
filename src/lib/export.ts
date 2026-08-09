@@ -1,4 +1,4 @@
-import { CV_SHEET_CSS } from "@/lib/cv-template";
+import { CV_SHEET_CSS, buildCvTypographyCss } from "@/lib/cv-template";
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -9,13 +9,29 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-/** 浏览器打印对话框导出 PDF */
+export type ExportTypography = {
+  fontSizePt?: number;
+  lineHeight?: number;
+};
+
+function sheetStyles(typography?: ExportTypography) {
+  const override = buildCvTypographyCss(
+    typography?.fontSizePt,
+    typography?.lineHeight
+  );
+  return `${CV_SHEET_CSS}\n${override}`;
+}
+
 /** 浏览器打印对话框导出 PDF（单页 A4） */
-export function exportHtmlPdf(html: string, title = "CV") {
+export function exportHtmlPdf(
+  html: string,
+  title = "CV",
+  typography?: ExportTypography
+) {
   const w = window.open("", "_blank");
   if (!w) return false;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${title}</title>
-<style>${CV_SHEET_CSS}
+<style>${sheetStyles(typography)}
 html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;}
 .export-doc{padding:24px;font-size:14px;line-height:1.6;white-space:pre-wrap;}
 @media print{
@@ -30,11 +46,15 @@ html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-se
 }
 
 /** Word 兼容 HTML（.doc），Office / WPS 可直接打开 */
-export function exportHtmlWord(bodyHtml: string, filename: string) {
+export function exportHtmlWord(
+  bodyHtml: string,
+  filename: string,
+  typography?: ExportTypography
+) {
   const doc = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office"
  xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"/><title>${filename}</title>
-<style>${CV_SHEET_CSS}
+<style>${sheetStyles(typography)}
 body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.5;}
 .export-doc{white-space:pre-wrap;}
 </style></head><body>${bodyHtml}</body></html>`;

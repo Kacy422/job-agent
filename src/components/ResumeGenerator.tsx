@@ -31,9 +31,15 @@ import {
 } from "@/components/CvReviewLayout";
 import { PageHeader } from "@/components/PageHeader";
 import {
+  CV_FONT_SIZE_OPTIONS,
+  CV_LINE_PRESETS,
+  CV_TYPOGRAPHY_DEFAULTS,
   DEFAULT_CV_SKILLS,
+  buildCvTypographyCss,
   ensureSkillsSection,
   mergeCompanyRoleInline,
+  type CvFontSizePt,
+  type CvLinePreset,
 } from "@/lib/cv-template";
 import {
   exportHtmlPdf,
@@ -105,8 +111,32 @@ export function ResumeGenerator() {
   /** Completed generation rounds; refine always uses round = cvRevisionRound + 1 */
   const [cvRevisionRound, setCvRevisionRound] = useState(0);
   const [cvHighlights, setCvHighlights] = useState<CvHighlight[]>([]);
+  const [revisionAlignments, setRevisionAlignments] = useState<
+    {
+      instruction: string;
+      status: "done" | "partial" | "blocked";
+      evidence: string;
+      note: string;
+    }[]
+  >([]);
+  const [cvFontSizePt, setCvFontSizePt] = useState<CvFontSizePt>(
+    CV_TYPOGRAPHY_DEFAULTS.fontSizePt
+  );
+  const [cvLineHeight, setCvLineHeight] = useState<number>(
+    CV_TYPOGRAPHY_DEFAULTS.lineHeight
+  );
   const exportRef = useRef<HTMLDivElement>(null);
   const refineAbortRef = useRef<AbortController | null>(null);
+
+  const cvLinePreset: CvLinePreset | "custom" =
+    Math.abs(cvLineHeight - CV_LINE_PRESETS.tight) < 0.02
+      ? "tight"
+      : Math.abs(cvLineHeight - CV_LINE_PRESETS.normal) < 0.02
+        ? "normal"
+        : Math.abs(cvLineHeight - CV_LINE_PRESETS.loose) < 0.02
+          ? "loose"
+          : "custom";
+  const cvTypographyCss = buildCvTypographyCss(cvFontSizePt, cvLineHeight);
   const clearingRef = useRef(false);
   const urlParseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Skip path-B exclusivity while auto-filling JD from URL parse */
@@ -133,6 +163,7 @@ export function ResumeGenerator() {
     setInterviewQA([]);
     setRationale({ ...EMPTY_CV_RATIONALE });
     setCvHighlights([]);
+    setRevisionAlignments([]);
     setShowRationale(false);
     setCvEpoch((n) => n + 1);
     setCvRevisionRound(0);
@@ -485,6 +516,12 @@ export function ResumeGenerator() {
     rationaleList?: unknown;
     highlights?: Partial<CvHighlight>[];
     revisionRound?: number;
+    revisionAlignments?: {
+      instruction: string;
+      status: "done" | "partial" | "blocked";
+      evidence: string;
+      note: string;
+    }[];
   }) {
     const rationaleNext = normalizeCvRationale(
       data.rationale ?? data.rationaleList
@@ -512,6 +549,11 @@ export function ResumeGenerator() {
     // Clean baseline for next incremental round (no marks)
     setTailoredResume(stripReviewMarks(rawHtml));
     setRationale(rationaleNext);
+    if (Array.isArray(data.revisionAlignments)) {
+      setRevisionAlignments(data.revisionAlignments);
+    } else {
+      setRevisionAlignments([]);
+    }
     if (typeof data.revisionRound === "number" && data.revisionRound > 0) {
       setCvRevisionRound(data.revisionRound);
     }
@@ -823,7 +865,14 @@ export function ResumeGenerator() {
       setError("暂无 CV 可导出");
       return;
     }
-    if (!exportHtmlPdf(html, "CV")) setError("浏览器拦截了弹窗");
+    if (
+      !exportHtmlPdf(html, "CV", {
+        fontSizePt: cvFontSizePt,
+        lineHeight: cvLineHeight,
+      })
+    ) {
+      setError("浏览器拦截了弹窗");
+    }
   }
 
   function exportCvWord() {
@@ -832,7 +881,11 @@ export function ResumeGenerator() {
       setError("暂无 CV 可导出");
       return;
     }
-    exportHtmlWord(html, `${draftCompany || "CV"}-${draftTitle || "Resume"}.doc`);
+    exportHtmlWord(
+      html,
+      `${draftCompany || "CV"}-${draftTitle || "Resume"}.doc`,
+      { fontSizePt: cvFontSizePt, lineHeight: cvLineHeight }
+    );
   }
 
   async function copyCvText() {
@@ -1170,8 +1223,67 @@ export function ResumeGenerator() {
           )}
         </div>
 
-        <div className="min-h-0 min-w-0 space-y-4">
+        <div className="min-h-0 min-w-0 space-y-3">
           {hasCv ? (
+            <>
+              <div className="glass-panel flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-slate-700">排版</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500">字号</span>
+                  {CV_FONT_SIZE_OPTIONS.map((pt) => (
+                    <button
+                      key={pt}
+                      type="button"
+                      onClick={() => setCvFontSizePt(pt)}
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                        cvFontSizePt === pt
+                          ? "bg-teal-600 text-white"
+                          : "bg-white/80 text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {pt}pt
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500">行距</span>
+                  {(
+                    [
+                      ["tight", "Tight"],
+                      ["normal", "Normal"],
+                      ["loose", "Loose"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setCvLineHeight(CV_LINE_PRESETS[key])}
+                      className={`rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                        cvLinePreset === key
+                          ? "bg-teal-600 text-white"
+                          : "bg-white/80 text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <label className="ml-1 flex items-center gap-1.5 text-[10px] text-slate-500">
+                    <span>{cvLineHeight.toFixed(2)}</span>
+                    <input
+                      type="range"
+                      min={1.1}
+                      max={1.5}
+                      step={0.01}
+                      value={cvLineHeight}
+                      onChange={(e) =>
+                        setCvLineHeight(Number(e.target.value))
+                      }
+                      className="h-1 w-24 accent-teal-600"
+                      aria-label="行距微调"
+                    />
+                  </label>
+                </div>
+              </div>
             <CvReviewLayout
               highlights={cvHighlights}
               cv={
@@ -1185,6 +1297,7 @@ export function ResumeGenerator() {
                   }}
                   exportRef={exportRef}
                   extraCss={CV_REVIEW_CSS}
+                  typographyCss={cvTypographyCss}
                   toolbar={
                     <>
                       <button
@@ -1242,6 +1355,48 @@ export function ResumeGenerator() {
                         生成 CV 后将在此显示批注
                       </p>
                     )}
+                    {revisionAlignments.length > 0 && (
+                      <div className="mt-3 space-y-1.5 border-t border-slate-200/70 pt-3">
+                        <p className="px-0.5 text-[10px] font-semibold tracking-wide text-slate-600">
+                          指令对齐（本轮修改）
+                        </p>
+                        {revisionAlignments.map((a, i) => (
+                          <div
+                            key={`${a.instruction}-${i}`}
+                            className="rounded-xl border border-slate-200/60 bg-white/70 px-2.5 py-2 text-[11px]"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-medium text-slate-800">
+                                {i + 1}. {a.instruction}
+                              </p>
+                              <span
+                                className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                                  a.status === "done"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : a.status === "partial"
+                                      ? "bg-amber-50 text-amber-800"
+                                      : "bg-rose-50 text-rose-700"
+                                }`}
+                              >
+                                {a.status === "done"
+                                  ? "已落地"
+                                  : a.status === "partial"
+                                    ? "部分"
+                                    : "受阻"}
+                              </span>
+                            </div>
+                            {a.note && (
+                              <p className="mt-1 text-slate-500">{a.note}</p>
+                            )}
+                            {a.evidence && (
+                              <p className="mt-1 line-clamp-2 text-[10px] text-teal-800/80">
+                                “{a.evidence}”
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="glass-panel shrink-0 p-4">
@@ -1249,7 +1404,7 @@ export function ResumeGenerator() {
                       手动添加修改需求
                     </h4>
                     <p className="mb-2 text-[11px] text-slate-500">
-                      基于第 {Math.max(1, cvRevisionRound)} 轮结果继续叠加修改，无次数上限
+                      基于第 {Math.max(1, cvRevisionRound)} 轮结果继续叠加修改；多条指令请换行或用分号分隔
                     </p>
                     <textarea
                       value={revisionNotes}
@@ -1283,6 +1438,7 @@ export function ResumeGenerator() {
                 </aside>
               }
             />
+            </>
           ) : (
             <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-dashed border-slate-300/70 bg-white/50 px-6 text-center text-sm text-slate-400 shadow-glass backdrop-blur-md">
               选择路径 A（链接）或路径 B（JD 文本），点击「根据 JD 改写

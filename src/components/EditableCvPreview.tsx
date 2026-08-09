@@ -26,6 +26,8 @@ interface Props {
   exportRef: RefObject<HTMLDivElement | null>;
   toolbar?: ReactNode;
   extraCss?: string;
+  /** Live typography override (font-size / line-height) — applied to preview */
+  typographyCss?: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export function EditableCvPreview({
   exportRef,
   toolbar,
   extraCss,
+  typographyCss,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -177,7 +180,7 @@ export function EditableCvPreview({
       </div>
       <style
         dangerouslySetInnerHTML={{
-          __html: `${CV_SHEET_CSS}\n${extraCss || ""}`,
+          __html: `${CV_SHEET_CSS}\n${typographyCss || ""}\n${extraCss || ""}`,
         }}
       />
       <div
