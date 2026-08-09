@@ -172,6 +172,8 @@ export interface ProfileData {
   contactName: string;
   contactPhone: string;
   contactEmail: string;
+  /** CV header / contact line — e.g. Hong Kong */
+  contactAddress: string;
   /** Structured phone for split country-code / local forms */
   phoneCountryCode: string;
   phoneNumber: string;
@@ -182,6 +184,7 @@ export interface ProfileData {
   preferredName: string;
   hkid: string;
   passport: string;
+  /** Visa / work authorization — also shown on CV contact line */
   workVisaStatus: string;
   availableDate: string;
   expectedSalary: string;
@@ -204,6 +207,7 @@ export type ProfileScalarKey =
   | "contactName"
   | "contactPhone"
   | "contactEmail"
+  | "contactAddress"
   | "phoneCountryCode"
   | "phoneNumber"
   | "title"
@@ -233,6 +237,7 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
   contactName: "WU XUELIAN, KACY",
   contactPhone: "+852 65733452",
   contactEmail: "wuxuelian25@126.com",
+  contactAddress: "Hong Kong",
   phoneCountryCode: "+852",
   phoneNumber: "65733452",
   title: "Ms.",
@@ -241,7 +246,7 @@ export const DEFAULT_PROFILE_FROM_CV: ProfileData = {
   preferredName: "Kacy",
   hkid: "",
   passport: "",
-  workVisaStatus: "IANG",
+  workVisaStatus: "IANG Visa",
   availableDate: "",
   expectedSalary: "",
   educationLevel: "Master's Degree",
@@ -319,6 +324,7 @@ export const EMPTY_PROFILE: ProfileData = {
   contactName: "",
   contactPhone: "",
   contactEmail: "",
+  contactAddress: "",
   phoneCountryCode: "",
   phoneNumber: "",
   title: "",

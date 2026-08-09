@@ -37,6 +37,7 @@ import {
   CV_TYPOGRAPHY_DEFAULTS,
   DEFAULT_CV_SKILLS,
   buildCvTypographyCss,
+  ensureCvHeaderContact,
   ensureSkillsSection,
   mergeCompanyRoleInline,
   type CvFontSizePt,
@@ -264,11 +265,7 @@ export function ResumeGenerator() {
 
   useEffect(() => {
     if (tailoredResume?.includes("cv-sheet") && !resumeHtml) {
-      const fixed = ensureSkillsSection(tailoredResume, {
-        software: profile.skillsSoftware,
-        language: profile.skillsLanguage,
-        certificate: profile.skillsCertificate,
-      });
+      const fixed = decorateCvHtml(tailoredResume);
       setResumeHtml(fixed);
       setTailoredResume(stripReviewMarks(fixed));
       setCvEpoch((n) => n + 1);
@@ -283,6 +280,25 @@ export function ResumeGenerator() {
       certificate:
         profile.skillsCertificate?.trim() || DEFAULT_CV_SKILLS.certificate,
     };
+  }
+
+  function contactOverrides() {
+    return {
+      name: profile.contactName?.trim() || "WU XUELIAN, KACY",
+      phone: profile.contactPhone?.trim() || "+852 65733452",
+      email: profile.contactEmail?.trim() || "wuxuelian25@126.com",
+      address: profile.contactAddress?.trim() || "Hong Kong",
+      visa: profile.workVisaStatus?.trim() || "IANG Visa",
+    };
+  }
+
+  function decorateCvHtml(html: string) {
+    return ensureCvHeaderContact(
+      mergeCompanyRoleInline(
+        ensureSkillsSection(html, skillsOverrides())
+      ),
+      contactOverrides()
+    );
   }
 
   const jdOrUrl = draftJd.trim() || draftJobUrl.trim() || cachedParsedJd.trim();
@@ -587,11 +603,8 @@ export function ResumeGenerator() {
     const rationaleNext = normalizeCvRationale(
       data.rationale ?? data.rationaleList
     );
-    const rawHtml = mergeCompanyRoleInline(
-      ensureSkillsSection(
-        String(data.tailoredResumeHtml || "").trim(),
-        skillsOverrides()
-      )
+    const rawHtml = decorateCvHtml(
+      String(data.tailoredResumeHtml || "").trim()
     );
     if (!rawHtml) {
       throw new Error("未返回有效 CV HTML");
@@ -996,7 +1009,7 @@ export function ResumeGenerator() {
       resumeHtml.trim() ||
       tailoredResume ||
       "";
-    return mergeCompanyRoleInline(stripReviewMarks(raw));
+    return decorateCvHtml(stripReviewMarks(raw));
   }
 
   function exportCvPdf() {

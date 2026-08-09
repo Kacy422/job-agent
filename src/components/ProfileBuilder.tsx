@@ -231,7 +231,7 @@ export function ProfileBuilder() {
             <h3 className="font-medium text-slate-900">基本信息 / Contact</h3>
           </div>
           <p className="mb-2 text-xs text-slate-500">
-            姓名、电话、邮箱（将出现在 CV 页眉）
+            姓名、电话、邮箱、住址与签证（将出现在 CV 页眉联系方式栏）
           </p>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
@@ -255,6 +255,24 @@ export function ProfileBuilder() {
               }}
               placeholder="完整电话 +852 …"
               className="soft-input"
+            />
+            <input
+              value={profile.contactAddress}
+              onChange={(e) =>
+                updateProfileField("contactAddress", e.target.value)
+              }
+              placeholder="Address（如 Hong Kong）"
+              className="soft-input"
+              aria-label="Address"
+            />
+            <input
+              value={profile.workVisaStatus}
+              onChange={(e) =>
+                updateProfileField("workVisaStatus", e.target.value)
+              }
+              placeholder="Visa / Work Authorization（如 IANG Visa）"
+              className="soft-input sm:col-span-2"
+              aria-label="Visa / Work Authorization"
             />
           </div>
           <p className="mb-2 mt-4 text-xs font-medium text-slate-600">
@@ -324,7 +342,7 @@ export function ProfileBuilder() {
               onChange={(e) =>
                 updateProfileField("workVisaStatus", e.target.value)
               }
-              placeholder="Work Visa (IANG / TTPS)"
+              placeholder="Work Visa (IANG Visa / No sponsorship required)"
               className="soft-input"
             />
             <input

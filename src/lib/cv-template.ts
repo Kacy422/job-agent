@@ -294,7 +294,7 @@ export function buildEmptyCvHtml(): string {
   return `<div class="cv-sheet">
   <header class="cv-header">
     <p class="cv-name">WU XUELIAN, KACY</p>
-    <p class="cv-contact">+852 65733452 &nbsp; Email: wuxuelian25@126.com</p>
+    <p class="cv-contact">+852 65733452 | wuxuelian25@126.com | Hong Kong | IANG Visa</p>
   </header>
   <div class="cv-body">
     <section class="cv-section">
@@ -596,12 +596,75 @@ export function mergeCompanyRoleInline(html: string): string {
   );
 }
 
+export type CvContactInfo = {
+  name?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  visa?: string;
+};
+
+/** Build compact contact line: phone | email | address | visa */
+export function buildCvContactLine(info: CvContactInfo): string {
+  return [
+    info.phone?.trim(),
+    info.email?.trim(),
+    info.address?.trim(),
+    info.visa?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" | ");
+}
+
+/**
+ * Sync CV header name + contact line from Profile (Address / Visa included).
+ * Safe to run on every generate / refine / export path.
+ */
+export function ensureCvHeaderContact(
+  html: string,
+  info: CvContactInfo
+): string {
+  if (!html) return html;
+  let out = html;
+  const name = (info.name || "").trim();
+  const line = buildCvContactLine(info);
+  if (name) {
+    if (/<p[^>]*class="[^"]*cv-name[^"]*"[^>]*>[\s\S]*?<\/p>/i.test(out)) {
+      out = out.replace(
+        /<p([^>]*class="[^"]*cv-name[^"]*"[^>]*)>[\s\S]*?<\/p>/i,
+        `<p$1>${escapeCvText(name)}</p>`
+      );
+    }
+  }
+  if (line) {
+    if (/<p[^>]*class="[^"]*cv-contact[^"]*"[^>]*>[\s\S]*?<\/p>/i.test(out)) {
+      out = out.replace(
+        /<p([^>]*class="[^"]*cv-contact[^"]*"[^>]*)>[\s\S]*?<\/p>/i,
+        `<p$1>${escapeCvText(line)}</p>`
+      );
+    } else if (/<p[^>]*class="[^"]*cv-name[^"]*"[^>]*>[\s\S]*?<\/p>/i.test(out)) {
+      out = out.replace(
+        /(<p[^>]*class="[^"]*cv-name[^"]*"[^>]*>[\s\S]*?<\/p>)/i,
+        `$1\n    <p class="cv-contact">${escapeCvText(line)}</p>`
+      );
+    }
+  }
+  return out;
+}
+
 export const CV_HTML_SCHEMA_HINT = `Return HTML rooted in <div class="cv-sheet"> that FILLS exactly ONE A4 page (no overflow):
 
 === Structure ===
 header.cv-header (p.cv-name + p.cv-contact) + div.cv-body with sections:
 EDUCATION → INTERNSHIP EXPERIENCE → (SCHOOL PROJECTS & LEADERSHIP OR PROJECTS & OTHER EXPERIENCES) → SKILLS
 Do NOT create a CERTIFICATES section heading.
+
+=== Header / Contact (MANDATORY) ===
+- p.cv-name = candidate full name from Contact section
+- p.cv-contact = single compact line joined by " | " (NOT "Email:" label):
+  Phone | Email | Address | Visa
+  Example: +852 65733452 | wuxuelian25@126.com | Hong Kong | IANG Visa
+- Use Address and Visa / Work Authorization exactly as provided in Contact / Profile Data when present.
 
 === Entry pattern ===
 Wrap each item in <div class="cv-entry">:

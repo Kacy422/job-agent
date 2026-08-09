@@ -33,6 +33,14 @@ export function buildApplyFormFields(
     },
     { label: "Email", value: profile.contactEmail || "wuxuelian25@126.com" },
     { label: "Phone", value: phone },
+    {
+      label: "Address",
+      value: profile.contactAddress || "Hong Kong",
+    },
+    {
+      label: "Visa / Work Authorization",
+      value: profile.workVisaStatus || "IANG Visa",
+    },
     { label: "Phone Country Code", value: profile.phoneCountryCode || "+852" },
     { label: "Phone Number", value: profile.phoneNumber || "" },
     { label: "Mobile", value: phone },

@@ -29,11 +29,15 @@ export function buildFullExperienceFromProfile(profile: ProfileData): string {
     profile.contactName,
     profile.contactPhone,
     profile.contactEmail,
+    profile.contactAddress,
+    profile.workVisaStatus,
   ]
     .map((s) => s.trim())
     .filter(Boolean);
   if (contact.length) {
-    parts.push(`# Contact\n${contact.join(" · ")}`);
+    parts.push(
+      `# Contact (CV header line — join with " | ")\nName: ${profile.contactName.trim() || "WU XUELIAN, KACY"}\nPhone: ${profile.contactPhone.trim() || "+852 65733452"}\nEmail: ${profile.contactEmail.trim() || "wuxuelian25@126.com"}\nAddress: ${profile.contactAddress.trim() || "Hong Kong"}\nVisa / Work Authorization: ${profile.workVisaStatus.trim() || "IANG Visa"}\nFormat cv-contact exactly like: +852 65733452 | wuxuelian25@126.com | Hong Kong | IANG Visa`
+    );
   }
   const edu = formatEntries("Education", profile.education);
   const intern = formatEntries("Internship Experience", profile.internship);
@@ -105,6 +109,10 @@ export function migrateToProfile(
         contactEmail: pick(
           e.contactEmail,
           DEFAULT_PROFILE_FROM_CV.contactEmail
+        ),
+        contactAddress: pick(
+          e.contactAddress,
+          DEFAULT_PROFILE_FROM_CV.contactAddress
         ),
         phoneCountryCode: pick(
           e.phoneCountryCode,
