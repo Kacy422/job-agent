@@ -30,7 +30,7 @@ import {
   exportHtmlPdf,
   exportHtmlWord,
   interviewQaToHtml,
-  wrapPlainAsDoc,
+  wrapCoverLetterAsDoc,
 } from "@/lib/export";
 
 const STATUSES: TrackStatus[] = [
@@ -104,7 +104,7 @@ export function ApplicationsTracker() {
     if (kind === "cv") {
       exportHtmlPdf(app.cvHtml || "", label);
     } else if (kind === "cover") {
-      exportHtmlPdf(wrapPlainAsDoc(app.coverLetter || ""), label);
+      exportHtmlPdf(wrapCoverLetterAsDoc(app.coverLetter || ""), label);
     } else {
       exportHtmlPdf(
         interviewQaToHtml(app.interviewQA || []),
@@ -120,7 +120,7 @@ export function ApplicationsTracker() {
     if (kind === "cv") {
       exportHtmlWord(app.cvHtml || "", `${base}-CV`);
     } else if (kind === "cover") {
-      exportHtmlWord(wrapPlainAsDoc(app.coverLetter || ""), `${base}-CL`);
+      exportHtmlWord(wrapCoverLetterAsDoc(app.coverLetter || ""), `${base}-CL`);
     } else {
       exportHtmlWord(
         interviewQaToHtml(app.interviewQA || []),

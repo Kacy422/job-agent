@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { EditableCvPreview } from "@/components/EditableCvPreview";
+import { EditableCoverLetter } from "@/components/EditableCoverLetter";
 import {
   applyHighlightsToHtml,
   buildHighlights,
@@ -41,10 +42,11 @@ import {
   type CvFontSizePt,
   type CvLinePreset,
 } from "@/lib/cv-template";
+import { normalizeCoverLetterText } from "@/lib/cover-letter";
 import {
   exportHtmlPdf,
   exportHtmlWord,
-  wrapPlainAsDoc,
+  wrapCoverLetterAsDoc,
 } from "@/lib/export";
 import { isValidCompanyName, isValidJobTitle } from "@/lib/job-meta";
 import {
@@ -95,6 +97,19 @@ export function ResumeGenerator() {
 
   const [loadingCv, setLoadingCv] = useState(false);
   const [loadingCover, setLoadingCover] = useState(false);
+  const [loadingCoverRefine, setLoadingCoverRefine] = useState(false);
+  const [coverRevisionNotes, setCoverRevisionNotes] = useState("");
+  const [coverRefineStatus, setCoverRefineStatus] = useState("");
+  const [coverRevisionRound, setCoverRevisionRound] = useState(0);
+  const [coverEpoch, setCoverEpoch] = useState(0);
+  const [coverAlignments, setCoverAlignments] = useState<
+    {
+      instruction: string;
+      status: "done" | "partial" | "blocked";
+      evidence: string;
+      note: string;
+    }[]
+  >([]);
   const [loadingInterview, setLoadingInterview] = useState(false);
   const [loadingParse, setLoadingParse] = useState(false);
   const [error, setError] = useState("");
@@ -160,6 +175,11 @@ export function ResumeGenerator() {
     setResumeHtml("");
     setTailoredResume("");
     setCoverLetter("");
+    setCoverRevisionNotes("");
+    setCoverRefineStatus("");
+    setCoverRevisionRound(0);
+    setCoverAlignments([]);
+    setCoverEpoch((n) => n + 1);
     setInterviewQA([]);
     setRationale({ ...EMPTY_CV_RATIONALE });
     setCvHighlights([]);
@@ -717,6 +737,7 @@ export function ResumeGenerator() {
     }
     setLoadingCover(true);
     setError("");
+    setCoverRefineStatus("");
     try {
       const resolved = await resolveJd();
       const res = await fetch("/api/generate-cover-letter", {
@@ -727,16 +748,76 @@ export function ResumeGenerator() {
           resume: fullExperience,
           company: draftCompany || resolved.company || "the company",
           jobTitle: draftTitle || resolved.title || "the role",
+          revisionRound: 1,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "生成失败");
-      setCoverLetter(String(data.coverLetter || ""));
+      setCoverLetter(
+        normalizeCoverLetterText(String(data.coverLetter || ""))
+      );
+      setCoverRevisionRound(1);
+      setCoverAlignments([]);
+      setCoverRevisionNotes("");
+      setCoverEpoch((n) => n + 1);
       bindGenerationSource();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cover Letter 生成失败");
     } finally {
       setLoadingCover(false);
+    }
+  }
+
+  async function refineCover() {
+    if (!coverLetter.trim()) {
+      setError("请先生成 Cover Letter");
+      return;
+    }
+    if (!coverRevisionNotes.trim()) {
+      setError("请填写 Cover Letter 修改建议");
+      return;
+    }
+    if (!fullExperience.trim()) {
+      setError("请先在「人物画像」填写结构化经历");
+      return;
+    }
+    const nextRound = Math.max(2, coverRevisionRound + 1);
+    setLoadingCoverRefine(true);
+    setError("");
+    setCoverRefineStatus(`第 ${nextRound} 轮优化中…`);
+    try {
+      const resolved = await resolveJd();
+      const res = await fetch("/api/generate-cover-letter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jd: resolved.jd,
+          resume: fullExperience,
+          company: draftCompany || resolved.company || "the company",
+          jobTitle: draftTitle || resolved.title || "the role",
+          currentCoverLetter: normalizeCoverLetterText(coverLetter),
+          revisionNotes: coverRevisionNotes.trim(),
+          revisionRound: nextRound,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "重新优化失败");
+      setCoverLetter(
+        normalizeCoverLetterText(String(data.coverLetter || ""))
+      );
+      setCoverRevisionRound(Number(data.revisionRound) || nextRound);
+      setCoverAlignments(
+        Array.isArray(data.revisionAlignments) ? data.revisionAlignments : []
+      );
+      setCoverRevisionNotes("");
+      setCoverEpoch((n) => n + 1);
+      setCoverRefineStatus(`第 ${nextRound} 轮已完成，可继续叠加修改`);
+      bindGenerationSource();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Cover Letter 重新优化失败");
+      setCoverRefineStatus("");
+    } finally {
+      setLoadingCoverRefine(false);
     }
   }
 
@@ -908,20 +989,22 @@ export function ResumeGenerator() {
 
   function exportCoverPdf() {
     if (!coverLetter) return;
-    exportHtmlPdf(wrapPlainAsDoc(coverLetter), "Cover Letter");
+    exportHtmlPdf(wrapCoverLetterAsDoc(coverLetter), "Cover Letter");
   }
 
   function exportCoverWord() {
     if (!coverLetter) return;
     exportHtmlWord(
-      wrapPlainAsDoc(coverLetter),
+      wrapCoverLetterAsDoc(coverLetter),
       `${draftCompany || "CoverLetter"}.doc`
     );
   }
 
   async function copyCover() {
     if (!coverLetter) return;
-    await navigator.clipboard.writeText(coverLetter);
+    await navigator.clipboard.writeText(
+      normalizeCoverLetterText(coverLetter)
+    );
     setCopiedKey("cl");
     setTimeout(() => setCopiedKey(null), 1500);
   }
@@ -1158,9 +1241,14 @@ export function ResumeGenerator() {
           {coverLetter && (
             <div className="glass-panel p-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h4 className="text-sm font-medium text-slate-800">
-                  Cover Letter
-                </h4>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-800">
+                    Cover Letter
+                  </h4>
+                  <p className="mt-0.5 text-[10px] text-slate-400">
+                    点击正文直接编辑 · 第 {Math.max(1, coverRevisionRound)} 轮
+                  </p>
+                </div>
                 <div className="flex flex-wrap gap-1">
                   <button
                     type="button"
@@ -1192,9 +1280,92 @@ export function ResumeGenerator() {
                   </button>
                 </div>
               </div>
-              <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                {coverLetter}
-              </pre>
+
+              <EditableCoverLetter
+                value={coverLetter}
+                contentKey={coverEpoch}
+                disabled={loadingCover || loadingCoverRefine}
+                onChange={(text) =>
+                  setCoverLetter(normalizeCoverLetterText(text))
+                }
+              />
+
+              {coverAlignments.length > 0 && (
+                <div className="mt-3 space-y-1.5 border-t border-slate-200/60 pt-3">
+                  <p className="text-[10px] font-semibold tracking-wide text-slate-600">
+                    指令对齐（本轮修改）
+                  </p>
+                  {coverAlignments.map((a, i) => (
+                    <div
+                      key={`${a.instruction}-${i}`}
+                      className="rounded-lg border border-slate-200/50 bg-white/70 px-2.5 py-1.5 text-[11px]"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-slate-800">
+                          {i + 1}. {a.instruction}
+                        </p>
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                            a.status === "done"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : a.status === "partial"
+                                ? "bg-amber-50 text-amber-800"
+                                : "bg-rose-50 text-rose-700"
+                          }`}
+                        >
+                          {a.status === "done"
+                            ? "已落地"
+                            : a.status === "partial"
+                              ? "部分"
+                              : "受阻"}
+                        </span>
+                      </div>
+                      {a.note && (
+                        <p className="mt-0.5 text-slate-500">{a.note}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-3 border-t border-slate-200/60 pt-3">
+                <h5 className="mb-1 text-xs font-semibold text-slate-800">
+                  根据建议迭代修改
+                </h5>
+                <p className="mb-2 text-[10px] text-slate-500">
+                  多条建议请换行或用分号分隔；将基于当前正文增量改写
+                </p>
+                <textarea
+                  value={coverRevisionNotes}
+                  onChange={(e) => setCoverRevisionNotes(e.target.value)}
+                  rows={2}
+                  disabled={loadingCoverRefine}
+                  placeholder="例如：更强调 ESG 数据分析；缩短结尾；语气更正式…"
+                  className="soft-textarea mb-2 w-full p-2 text-xs disabled:opacity-60"
+                />
+                {coverRefineStatus && (
+                  <p className="mb-2 text-[11px] text-emerald-700">
+                    {coverRefineStatus}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={refineCover}
+                  disabled={
+                    loadingCoverRefine || !coverRevisionNotes.trim()
+                  }
+                  className="soft-btn-accent w-full py-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  {loadingCoverRefine ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  {loadingCoverRefine
+                    ? `第 ${Math.max(2, coverRevisionRound + 1)} 轮优化中…`
+                    : "重新优化 Cover Letter"}
+                </button>
+              </div>
             </div>
           )}
 
