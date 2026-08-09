@@ -1,5 +1,6 @@
 /**
- * A4 single-page CV — dense professional typography (~10.5pt)
+ * A4 single-page CV — balanced fill typography (~11.5pt body)
+ * Sections distribute evenly on the page; Company | Role stays single-line
  * Internship: 2–4 STAR bullets (prefer 3); Projects/Leadership: 1 bullet each
  */
 
@@ -16,15 +17,15 @@ export const CV_SHEET_CSS = `
 }
 .cv-sheet {
   font-family: Arial, Helvetica, sans-serif;
-  font-size: 10.5pt;
-  line-height: 1.32;
+  font-size: 11.5pt;
+  line-height: 1.45;
   color: #000;
   background: #fff;
   width: 210mm;
   height: 297mm;
   max-width: 100%;
   margin: 0 auto;
-  padding: 10mm 12mm;
+  padding: 11mm 12mm;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -34,7 +35,7 @@ export const CV_SHEET_CSS = `
 .cv-sheet * { box-sizing: border-box; }
 .cv-header {
   text-align: center;
-  margin: 0 0 9px;
+  margin: 0 0 14px;
   flex-shrink: 0;
 }
 .cv-name {
@@ -43,41 +44,48 @@ export const CV_SHEET_CSS = `
   text-transform: uppercase;
   letter-spacing: 0.9px;
   margin: 0;
-  line-height: 1.12;
+  line-height: 1.15;
 }
 .cv-contact {
-  font-size: 10.5pt;
-  margin-top: 4px;
-  line-height: 1.32;
+  font-size: 11pt;
+  margin-top: 6px;
+  line-height: 1.4;
   font-weight: 400;
 }
+/* Evenly distribute sections across remaining A4 height — kills bottom void */
 .cv-body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 0;
   min-height: 0;
 }
 .cv-section {
-  margin: 0 0 9px;
+  margin: 0;
   flex: 0 0 auto;
+  padding: 2px 0 4px;
+}
+.cv-body > .cv-section + .cv-section {
+  margin-top: 4px;
+  padding-top: 10px;
 }
 .cv-body > .cv-section:last-child {
   margin-bottom: 0;
+  padding-bottom: 0;
 }
 .cv-section-title {
-  font-size: 11.5pt;
+  font-size: 12pt;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.45px;
   border-bottom: 1.5px solid #000;
-  margin: 0 0 5px;
-  padding: 0 0 2px;
-  line-height: 1.25;
+  margin: 0 0 10px;
+  padding: 0 0 4px;
+  line-height: 1.3;
 }
 .cv-entry {
-  margin: 0 0 7px;
+  margin: 0 0 12px;
 }
 .cv-entry:last-child {
   margin-bottom: 0;
@@ -86,7 +94,7 @@ export const CV_SHEET_CSS = `
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
   width: 100%;
 }
@@ -94,15 +102,15 @@ export const CV_SHEET_CSS = `
 .cv-section > .cv-bullets + .cv-row,
 .cv-section > .cv-sub + .cv-row,
 .cv-section > .cv-role + .cv-row {
-  margin-top: 7px;
+  margin-top: 10px;
 }
 .cv-left {
   flex: 1;
   min-width: 0;
-  font-size: 11pt;
+  font-size: 11.5pt;
   font-weight: 700;
   color: #000;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 /* Role italic after " | " when Company | Role share one line */
 .cv-role-inline {
@@ -111,48 +119,48 @@ export const CV_SHEET_CSS = `
 }
 .cv-role {
   display: block;
-  font-size: 10.5pt;
+  font-size: 11pt;
   font-weight: 500;
   font-style: italic;
-  margin: 1px 0 0;
-  line-height: 1.3;
+  margin: 2px 0 0;
+  line-height: 1.4;
   color: #000;
 }
 .cv-left .cv-role {
-  margin-top: 1px;
+  margin-top: 2px;
 }
 .cv-row + .cv-role {
-  margin-top: 1px;
-  margin-bottom: 1px;
+  margin-top: 2px;
+  margin-bottom: 2px;
 }
 .cv-right {
   flex-shrink: 0;
   text-align: right;
   white-space: nowrap;
-  font-size: 10.5pt;
+  font-size: 11pt;
   font-weight: 400;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 .cv-sub {
-  margin: 2px 0 3px;
+  margin: 3px 0 5px;
   font-weight: 400;
-  font-size: 10.5pt;
-  line-height: 1.32;
+  font-size: 11pt;
+  line-height: 1.5;
 }
 .cv-bullets {
   list-style: none !important;
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   padding: 0;
-  font-size: 10.5pt;
-  line-height: 1.32;
+  font-size: 11.5pt;
+  line-height: 1.55;
 }
 .cv-bullets li {
   list-style: none !important;
   position: relative;
-  padding-left: 12px;
-  margin: 0 0 2.5px;
-  font-size: 10.5pt;
-  line-height: 1.32;
+  padding-left: 13px;
+  margin: 0 0 6px;
+  font-size: 11.5pt;
+  line-height: 1.55;
   font-weight: 400;
 }
 .cv-bullets li:last-child {
@@ -171,9 +179,9 @@ export const CV_SHEET_CSS = `
   line-height: inherit;
 }
 .cv-skills-line {
-  margin: 2px 0;
-  font-size: 10.5pt;
-  line-height: 1.32;
+  margin: 5px 0;
+  font-size: 11.5pt;
+  line-height: 1.5;
   font-weight: 400;
 }
 .cv-skills-line strong,
@@ -204,7 +212,7 @@ export const CV_SHEET_CSS = `
     page-break-inside: avoid !important;
   }
   .cv-sheet {
-    padding: 10mm 12mm !important;
+    padding: 11mm 12mm !important;
     transform: none !important;
   }
 }
@@ -566,7 +574,7 @@ Exact pattern (bold labels ONLY; values in normal weight — never bold software
 - Translate Chinese library/notes into Professional Resume English and INCLUDE the facts. Never drop Chinese-only content.
 
 === Single-page A4 ===
-- ~10.5pt body with line-height ~1.32; compact section/entry margins. Fill the page with substantive internship bullets (prefer 3 each) — avoid sparse layout / large empty gaps; stay on one page.
+- ~11.5pt body with line-height ~1.55 on bullets; sections are CSS-distributed evenly on the page. Prefer 3 internship bullets each; stay on one page without overflowing.
 
 === Rules ===
 - Classes ONLY: cv-section, cv-section-title, cv-entry, cv-row, cv-left, cv-role, cv-right, cv-bullets, cv-skills-line, cv-sub
