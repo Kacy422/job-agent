@@ -48,6 +48,9 @@ export async function POST(req: Request) {
     const currentCvHtml = String(body.currentCvHtml || "")
       .replace(/<\/?mark\b[^>]*>/gi, "")
       .trim();
+    const baseCvHtml = String(body.baseCvHtml || "")
+      .replace(/<\/?mark\b[^>]*>/gi, "")
+      .trim();
     const revisionNotes = String(body.revisionNotes || "").trim();
     const revisionRound = Math.max(
       1,
@@ -62,6 +65,8 @@ export async function POST(req: Request) {
     }
 
     const isRevision = Boolean(revisionNotes && currentCvHtml);
+    /** Fine-tune from a previously saved tailored CV (not master-from-scratch) */
+    const isBaseFineTune = Boolean(baseCvHtml) && !isRevision;
 
     try {
       const content = await callDeepSeek(
@@ -95,6 +100,20 @@ Goal: maximize JD coverage depth — prefer richer, evidence-backed bullets over
 - Projects / Leadership: EXACTLY 1 bullet; dates on cv-right.
 - Header SAME LINE: Company <span class="cv-role-inline">| Role</span>
 - One dense A4 page; no page-2 overflow.
+
+${
+  isBaseFineTune
+    ? `=== BASE CV FINE-TUNE MODE (HIGHEST PRIORITY FOR THIS RUN) ===
+You are given a previously tailored Base CV (HTML) that was already customized for another role, PLUS a New Target JD.
+Your job is NOT to rebuild from the Master Profile alone.
+MUST:
+1) Start from the Base CV HTML — preserve its strong structure, section order, Company|Role headers, and core experience selection.
+2) Perform targeted secondary fine-tuning: re-align keywords, emphasis, and STAR bullets to the New JD.
+3) Keep high-quality Base CV content that still fits; only rewrite / swap bullets where New JD alignment requires it.
+4) Use Full Experience Library / Profile Data as the FACT CHECK and gap-fill source — never invent; prefer adapting Base CV wording over inventing new employers.
+5) Output a complete updated tailoredResumeHtml (full A4 HTML), not a diff patch.`
+    : ""
+}
 
 LANGUAGE:
 - tailoredResumeHtml: Professional Resume English only.
@@ -167,7 +186,20 @@ ${currentCvHtml.slice(0, 14000)}
 ${revisionNotes.slice(0, 2500)}
 
 完成后 JSON 必须包含 revisionAlignments，与上述指令一一对应。`
-              : `请按三步法定制 CV（只输出最终 JSON）：
+              : isBaseFineTune
+                ? `当前提供了一份经过初步定制的基础简历（Base CV）以及一个新的目标岗位描述（New JD）。
+请在保留原有基础简历中优质结构与核心经历的前提下，根据 New JD 进行二次针对性微调与关键词对齐，输出一份更新后的 CV。
+禁止从零重写；Profile Data 仅用于事实校验与必要补强，不得虚构。
+
+【New Target JD】
+${jd.slice(0, 5500)}
+
+【Full Experience Library / Profile Data — fact check】
+${resume.slice(0, 8000)}
+
+【Base CV HTML — START FROM THIS】
+${baseCvHtml.slice(0, 14000)}`
+                : `请按三步法定制 CV（只输出最终 JSON）：
 ① 深度拆解 JD（≥5–7 核心要求）；
 ② 语义/同义/软技能/工具/业务逻辑级匹配 Profile Data（禁止表面字面匹配；最大化提取相近经历）；
 ③ 逐条改写 STAR bullets，全面覆盖 JD；强动词；融合量化成果；侧重 ESG 实际应用与分析。
@@ -181,8 +213,8 @@ ${resume.slice(0, 10000)}`,
         ],
         {
           json: true,
-          temperature: isRevision ? 0.2 : 0.35,
-          timeoutMs: isRevision ? 150_000 : 120_000,
+          temperature: isRevision ? 0.2 : isBaseFineTune ? 0.28 : 0.35,
+          timeoutMs: isRevision || isBaseFineTune ? 150_000 : 120_000,
         }
       );
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   Download,
@@ -73,6 +73,7 @@ export function ResumeGenerator() {
   const {
     fullExperience,
     profile,
+    applications,
     draftJd,
     setDraftJd,
     draftJobUrl,
@@ -140,6 +141,8 @@ export function ResumeGenerator() {
   const [cvLineHeight, setCvLineHeight] = useState<number>(
     CV_TYPOGRAPHY_DEFAULTS.lineHeight
   );
+  /** "" = Master Profile; otherwise application id with saved cvHtml */
+  const [baseCvId, setBaseCvId] = useState("");
   const exportRef = useRef<HTMLDivElement>(null);
   const refineAbortRef = useRef<AbortController | null>(null);
 
@@ -152,6 +155,44 @@ export function ResumeGenerator() {
           ? "loose"
           : "custom";
   const cvTypographyCss = buildCvTypographyCss(cvFontSizePt, cvLineHeight);
+
+  const savedBaseCvs = useMemo(() => {
+    return applications
+      .filter((a) => Boolean(a.cvHtml && a.cvHtml.includes("cv-sheet")))
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt).getTime() -
+          new Date(a.updatedAt || a.createdAt).getTime()
+      );
+  }, [applications]);
+
+  useEffect(() => {
+    if (baseCvId && !savedBaseCvs.some((a) => a.id === baseCvId)) {
+      setBaseCvId("");
+    }
+  }, [baseCvId, savedBaseCvs]);
+
+  function formatBaseCvLabel(app: (typeof applications)[number]) {
+    const d = new Date(app.updatedAt || app.createdAt);
+    const dateStr = Number.isNaN(d.getTime())
+      ? ""
+      : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const company = app.company?.trim() || "未命名公司";
+    const title = app.title?.trim() || "未命名岗位";
+    return dateStr
+      ? `[${dateStr}] ${company} - ${title} CV`
+      : `${company} - ${title} CV`;
+  }
+
+  function resolveBaseCvHtml(): string | undefined {
+    if (!baseCvId) return undefined;
+    const app = applications.find((a) => a.id === baseCvId);
+    const html = app?.cvHtml?.trim();
+    if (!html || !html.includes("cv-sheet")) return undefined;
+    return stripReviewMarks(html);
+  }
+
   const clearingRef = useRef(false);
   const urlParseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Skip path-B exclusivity while auto-filling JD from URL parse */
@@ -647,13 +688,23 @@ export function ResumeGenerator() {
       setError("请粘贴岗位网址或 JD 描述");
       return;
     }
+    const baseHtml = resolveBaseCvHtml();
+    if (baseCvId && !baseHtml) {
+      setError("所选基础简历无效或已删除，请重新选择");
+      return;
+    }
     setLoadingCv(true);
     setError("");
     setRefineStatus("");
     try {
       const resolved = await resolveJd();
       const data = await fetchGenerateResume(
-        { jd: resolved.jd, resume: fullExperience, revisionRound: 1 },
+        {
+          jd: resolved.jd,
+          resume: fullExperience,
+          revisionRound: 1,
+          ...(baseHtml ? { baseCvHtml: baseHtml } : {}),
+        },
         { retries: 1 }
       );
       await applyCvResult({ ...data, revisionRound: 1 });
@@ -1084,6 +1135,35 @@ export function ResumeGenerator() {
             <h3 className="mb-3 font-display text-lg text-slate-900">
               目标岗位
             </h3>
+
+            <div className="mb-3">
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                <FileText className="h-3.5 w-3.5" />
+                选择基础简历（Base CV）
+              </label>
+              <select
+                value={baseCvId}
+                onChange={(e) => setBaseCvId(e.target.value)}
+                className="soft-input w-full text-sm"
+                aria-label="选择基础简历"
+              >
+                <option value="">默认原始履历 (Master Profile)</option>
+                {savedBaseCvs.map((app) => (
+                  <option key={app.id} value={app.id}>
+                    {formatBaseCvLabel(app)}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400">
+                {baseCvId
+                  ? "将以所选历史 CV 为底稿，按新 JD 做针对性微调（保留优质结构与核心经历）"
+                  : "从人物画像全量履历匹配生成；保存到求职进度的 CV 会出现在上方列表"}
+                {savedBaseCvs.length === 0
+                  ? " · 暂无历史简历，请先生成并「保存 CV 到求职进度」"
+                  : ""}
+              </p>
+            </div>
+
             <div className="mb-3 grid gap-2">
               <input
                 value={draftCompany}
@@ -1206,7 +1286,13 @@ export function ResumeGenerator() {
               ) : (
                 <Wand2 className="h-4 w-4" />
               )}
-              根据 JD 改写 CV
+              {loadingCv
+                ? baseCvId
+                  ? "基于已有 CV 微调中…"
+                  : "改写中…"
+                : baseCvId
+                  ? "基于已有 CV 微调"
+                  : "根据 JD 改写 CV"}
             </button>
             <p className="mt-2 text-[11px] text-slate-400">
               链接解析后自动填入 JD · 画像 {fullExperience.length} 字
