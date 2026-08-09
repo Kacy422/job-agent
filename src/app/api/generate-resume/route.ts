@@ -61,24 +61,46 @@ export async function POST(req: Request) {
           {
             role: "system",
             content: `You are an expert CV rewriter for the Hong Kong job market (MNC / local professional firms).
+You MUST silently complete the following THREE steps before writing HTML. Do not skip any step. Never invent employers, degrees, dates, or metrics not grounded in the Experience Library.
 
-=== STEP A — JD × PROFILE MATCHING (mandatory) ===
-From the Target JD, extract hard skills, soft skills, pain points, and seniority signals.
-Then scan the Full Experience Library (Profile Data) and SELECT / REWRITE only experiences that map to those JD keywords.
-Every internship bullet MUST echo at least one concrete JD keyword or pain point (tools, domains, stakeholders, deliverables).
-Never invent employers, degrees, dates, or metrics not grounded in the library.
+=== CAREER POSITIONING (always respect) ===
+Candidate focuses on PRACTICAL APPLICATION and ANALYSIS of ESG / sustainability principles (research, data, assessments, stakeholder engagement, reporting support, tools).
+AVOID framing experience as drafting, setting, or making regulations / policy rules / legislation. Prefer "applied ESG analysis / assessment / implementation support" over "policy formulation".
 
-=== STEP B — STAR REWRITE ===
-- Internship / Work: 2–4 STAR bullets per entry (RECOMMENDED: 3). Scale by source richness + JD match — never hard-cap at 2; each bullet = Verb + Task + Tools + Impact, JD-aligned.
-- Projects / Leadership: EXACTLY 1 high-impact bullet; dates required on cv-right.
-- Header format (SAME LINE): Company/Project <span class="cv-role-inline">| Role</span>
+=== STEP 1 — DEEP JD DECOMPOSITION (mandatory) ===
+Carefully read the Target JD. Extract at least 5–7 core skills and duty requirements as a mental checklist, e.g.:
+- data analysis / research
+- cross-functional collaboration
+- specific software / tools
+- report writing / presentations
+- stakeholder engagement
+- project support / process improvement
+- domain keywords (ESG, climate, sustainability, etc.)
+Every later bullet must help cover this checklist — no core JD requirement left uncovered across the whole CV.
+
+=== STEP 2 — EXPERIENCE MAPPING (mandatory) ===
+Read the Full Experience Library (original CV / profile). For EACH JD requirement from Step 1, find proof from relevant experiences (e.g. Crossroads Foundation internship, Chongqing urban greening internship, academic / leadership projects).
+Build an internal mapping draft: "JD requirement → matching experience(s) / evidence".
+Prefer mapping that highlights applied ESG analysis & outcomes, not regulatory drafting.
+Select / emphasize only library-grounded facts.
+
+=== STEP 3 — TAILORED BULLET REWRITE (mandatory) ===
+Rewrite all internship / work / project bullets from the mapping draft:
+- Collectively COVER all Step-1 core requirements — do not omit any.
+- Each bullet MUST start with a strong Action Verb.
+- Results-oriented: fuse original quantified metrics / project outcomes from the library whenever available.
+- STAR structure: Verb + Task/Context + Tools/Methods + Impact.
+- Internship / Work: 2–4 bullets per entry (RECOMMENDED: 3); scale by source richness + JD match.
+- Projects / Leadership: EXACTLY 1 high-impact JD-aligned bullet; dates on cv-right.
+- Header (SAME LINE): Company/Project <span class="cv-role-inline">| Role</span>
   Example: Crossroads Foundation, Hong Kong <span class="cv-role-inline">| Engagement Department Intern</span>
-- Fill one A4 page densely (substantive bullets, no large empty gaps); no sparse one-liners; no page-2 overflow.
+- Fill one A4 page densely; no sparse one-liners; no page-2 overflow.
 
 LANGUAGE RULE (MANDATORY):
 - tailoredResumeHtml: Professional Resume English only (no Chinese characters).
 - Chinese in library / notes → translate accurately into English and KEEP the facts.
 - rationale + highlight labels/reasons: Simplified Chinese only.
+- In rationale.added, briefly mention which JD requirements were covered (ultra-concise).
 
 Output STRICT JSON only (no markdown fences):
 {
@@ -111,7 +133,7 @@ ${
 BASE INPUT = the "Current Tailored CV HTML" below (this is the LATEST accepted version after round ${revisionRound - 1}).
 You MUST:
 1) Start from that HTML — do not regenerate from scratch unless notes require a full rewrite.
-2) Apply User Revision Notes precisely; keep all strong JD alignment unless notes override it.
+2) Re-run Steps 1–3 lightly: keep JD coverage; apply User Revision Notes on top of the baseline.
 3) Output a complete updated tailoredResumeHtml reflecting ONLY the requested deltas plus preserved prior content.
 4) highlights.phrase must come from the NEW output HTML (post-edit), not from the old CV.
 If notes are Chinese, translate intent into English CV edits — never ignore them.`
@@ -121,8 +143,31 @@ If notes are Chinese, translate intent into English CV edits — never ignore th
           {
             role: "user",
             content: isRevision
-              ? `【Revision Round】${revisionRound}\n\n【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library / Profile Data】\n${resume.slice(0, 8000)}\n\n【Current Tailored CV HTML — BASELINE FOR THIS ROUND】\n${currentCvHtml.slice(0, 14000)}\n\n【User Revision Notes — apply on top of baseline】\n${revisionNotes.slice(0, 2500)}`
-              : `【Target JD】\n${jd.slice(0, 5500)}\n\n【Full Experience Library / Profile Data】\n${resume.slice(0, 10000)}`,
+              ? `【Revision Round】${revisionRound}
+
+请先按系统提示完成：①深度拆解 JD（≥5–7 项核心要求）②经历映射（JD要求→履历证据）③逐条定制改写 Bullet Points（强动词开头、结果导向、全面覆盖 JD 核心要求；侧重 ESG 实际应用与分析，避免法规制定表述）。
+
+【Target JD】
+${jd.slice(0, 5500)}
+
+【Full Experience Library / Profile Data — 原版履历】
+${resume.slice(0, 8000)}
+
+【Current Tailored CV HTML — BASELINE FOR THIS ROUND】
+${currentCvHtml.slice(0, 14000)}
+
+【User Revision Notes — apply on top of baseline】
+${revisionNotes.slice(0, 2500)}`
+              : `请严格按三步法完成定制 CV（只输出最终 JSON，不要输出中间草稿）：
+① 深度拆解 JD：提取至少 5–7 个核心技能与职责要求；
+② 经历映射：对每项要求在原版履历中找证据（Crossroads / 重庆相关实习 / 学术与领导力项目等），并偏向 ESG 原则的实际应用与分析（非制定法规）；
+③ 逐条改写 Bullet Points：全面覆盖①中全部要求；每条以强动作动词开头；结果导向并融合原有量化数据/成果。
+
+【Target JD】
+${jd.slice(0, 5500)}
+
+【Full Experience Library / Profile Data — 原版履历】
+${resume.slice(0, 10000)}`,
           },
         ],
         {

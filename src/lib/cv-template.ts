@@ -538,9 +538,10 @@ Wrap each item in <div class="cv-entry">:
 === INTERNSHIP / WORK BULLETS (STAR-style, MANDATORY) ===
 - Header line MUST be: "Company/Organization Name, City | Role" (role in cv-role-inline span)
 - cv-right = dates
-- EACH internship/work entry: generate 2–4 STAR bullets (RECOMMENDED: 3). Choose count by (a) richness of duties/outcomes in the Full Experience Library and (b) JD keyword coverage — richer + stronger match → more bullets (up to 4); thinner source → 2.
-- Do NOT hard-limit to 2. Prefer 3 substantial bullets so the page looks full and professional.
-- Every bullet MUST follow: Action Verb + Task/Context + Tools/Methods + Quantifiable Impact/Value (complete STAR, not one-liners)
+- Rewrite from Step 1–2 mapping: collectively cover ALL extracted JD core requirements across entries.
+- EACH internship/work entry: 2–4 STAR bullets (RECOMMENDED: 3). Scale by source richness + JD match.
+- Each bullet: strong Action Verb first + Task/Context + Tools/Methods + Quantifiable Impact (keep library metrics).
+- Career tone: applied ESG / sustainability analysis & practical implementation — NOT drafting regulations or setting rules.
 - Fluency: idiomatic HK Business English. Never invent employers, dates, or metrics.
 
 === PROJECTS / LEADERSHIP (critical) ===
