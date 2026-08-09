@@ -45,19 +45,25 @@ export async function POST(req: Request) {
             content: `You write Cover Letters for the Hong Kong job market (MNC / local professional firms).
 
 LANGUAGE: High-quality Business English ONLY. No Chinese in coverLetter.
-Structure (MANDATORY — use blank lines between paragraphs, "\\n\\n" in the JSON string):
-1) Greeting paragraph (e.g. Dear Hiring Manager,)
-2) Opening — role + company + interest
-3) 1–2 body paragraphs — experience mapped to JD (facts only from Experience Library)
-4) Closing — thanks + call to action
-5) Sign-off (e.g. Yours sincerely,\\nWU XUELIAN, KACY)
-Target length: 280–420 words. Formal but warm. Prefer British/HK business phrasing. Never invent facts.
+Style: Crisp, compact, direct. Cut fluff, long transitions, and empty courtesies. Every sentence must carry substance.
+
+LENGTH (MANDATORY): ~250–300 words total (standard one-page concise letter). Prefer ~270. Do NOT exceed ~320.
+
+STRUCTURE (MANDATORY — classic 3 body paragraphs + greeting/sign-off; use "\\n\\n" between blocks):
+0) Greeting line only (e.g. Dear Hiring Manager,)
+1) OPENING (1 short paragraph): Name the exact role + company. In 1–2 sentences state your strongest background fit for this JD — no padded intro.
+2) BODY (1 paragraph only): Distill the TWO experiences/projects from the Experience Library that best match the JD. Fuse them tightly; highlight core skills + concrete outcomes. No laundry-list of every internship duty.
+3) CLOSING (1 short paragraph): Reaffirm genuine interest in the role, state readiness to interview, thank the reader — keep it brief and professional.
+4) Sign-off (e.g. Yours sincerely,\\nWU XUELIAN, KACY)
+
+Prefer British/HK business phrasing where natural. Facts only from Experience Library — never invent.
 
 ${
   isRevision
     ? `=== COMMAND EXECUTION AGENT (revision round ${revisionRound}) ===
 You are a Command Execution Agent for Cover Letter edits.
 BASE = Current Cover Letter below (latest accepted version). Start from it; do NOT regenerate from scratch unless notes require a full rewrite.
+Keep the 3-paragraph structure and ~250–300 word budget unless the user explicitly asks otherwise.
 Parse User Revision Notes into atomic commands (split by newlines / ； / ; / numbered lists).
 Execute EVERY command precisely — never skip, drop, or vaguely summarize away a command.
 Preserve strong JD alignment unless a command overrides it.
@@ -99,7 +105,9 @@ ${currentCoverLetter.slice(0, 6000)}
 
 【User Revision Commands — EXECUTE EACH】
 ${revisionNotes.slice(0, 2500)}`
-              : `Role: ${jobTitle}
+              : `请撰写一封约 250–300 词的精简 Cover Letter（经典 3 段式：开头点明岗位与匹配度；主体融合 2 段最贴合 JD 的经历与成果；结尾表达热情与面试期待）。语言干练紧凑，勿堆砌客套与流水账。
+
+Role: ${jobTitle}
 Company: ${company}
 
 【JD】
