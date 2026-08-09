@@ -3,8 +3,8 @@ import { callDeepSeek, extractJson } from "@/lib/deepseek";
 import {
   CV_HTML_SCHEMA_HINT,
   buildFallbackCvHtml,
+  enforceInternshipBullets,
   enforceOneProjectBullet,
-  enforceTwoInternshipBullets,
   ensureSkillsSection,
   mergeCompanyRoleInline,
 } from "@/lib/cv-template";
@@ -69,11 +69,11 @@ Every internship bullet MUST echo at least one concrete JD keyword or pain point
 Never invent employers, degrees, dates, or metrics not grounded in the library.
 
 === STEP B — STAR REWRITE ===
-- Internship / Work: EXACTLY 2 STAR bullets (Verb + Task + Tools + Impact), JD-aligned.
+- Internship / Work: 2–4 STAR bullets per entry (RECOMMENDED: 3). Scale by source richness + JD match — never hard-cap at 2; each bullet = Verb + Task + Tools + Impact, JD-aligned.
 - Projects / Leadership: EXACTLY 1 high-impact bullet; dates required on cv-right.
 - Header format (SAME LINE): Company/Project <span class="cv-role-inline">| Role</span>
   Example: Crossroads Foundation, Hong Kong <span class="cv-role-inline">| Engagement Department Intern</span>
-- Fill one A4 page evenly; no sparse one-liners; no page-2 overflow.
+- Fill one A4 page densely (substantive bullets, no large empty gaps); no sparse one-liners; no page-2 overflow.
 
 LANGUAGE RULE (MANDATORY):
 - tailoredResumeHtml: Professional Resume English only (no Chinese characters).
@@ -344,7 +344,7 @@ function normalizeHtml(raw: string): string {
   html = html.replace(/\bCertifications?\s*:/gi, "Certificate:");
   html = mergeCompanyRoleInline(html);
   html = ensureSkillsSection(html);
-  html = enforceTwoInternshipBullets(html);
+  html = enforceInternshipBullets(html);
   html = enforceOneProjectBullet(html);
   return html;
 }
