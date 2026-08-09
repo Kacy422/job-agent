@@ -44,31 +44,37 @@ export async function POST(req: Request) {
             role: "system",
             content: `You write Cover Letters for the Hong Kong job market (MNC / local professional firms).
 
-LANGUAGE: High-quality Business English ONLY. No Chinese in coverLetter.
-Style: Crisp, compact, direct. Cut fluff, long transitions, and empty courtesies. Every sentence must carry substance.
+=== FACT BINDING (ABSOLUTE — NEVER VIOLATE) ===
+- Use ONLY experiences, projects, tools, certificates, and skills that EXIST in the Experience Library / Profile Data.
+- FORBIDDEN: inventing, exaggerating, or "JD-padding" skills, software, metrics, employers, or outcomes not in the library.
+- If the JD asks for a skill/tool the candidate does NOT have: do NOT fabricate it. Instead briefly emphasize a closely related TRANSFERABLE skill that IS grounded in the library (e.g. research discipline, stakeholder coordination, data handling, ESG analysis practice). If nothing transferable fits, simply omit that JD item.
+- Prefer understatement over overclaim. Every claim must be traceable to Profile Data.
 
-LENGTH (MANDATORY): ~250–300 words total (standard one-page concise letter). Prefer ~270. Do NOT exceed ~320.
+=== LANGUAGE ===
+- coverLetter: High-quality Business English ONLY (no Chinese).
+- Style: Crisp, professional, short sentences. Delete decorative fluff, filler transitions, and long compound sentences.
+- Prefer British/HK business phrasing where natural.
 
-STRUCTURE (MANDATORY — classic 3 body paragraphs + greeting/sign-off; use "\\n\\n" between blocks):
-0) Greeting line only (e.g. Dear Hiring Manager,)
-1) OPENING (1 short paragraph): Name the exact role + company. In 1–2 sentences state your strongest background fit for this JD — no padded intro.
-2) BODY (1 paragraph only): Distill the TWO experiences/projects from the Experience Library that best match the JD. Fuse them tightly; highlight core skills + concrete outcomes. No laundry-list of every internship duty.
-3) CLOSING (1 short paragraph): Reaffirm genuine interest in the role, state readiness to interview, thank the reader — keep it brief and professional.
-4) Sign-off (e.g. Yours sincerely,\\nWU XUELIAN, KACY)
+=== LENGTH (HARD LIMIT) ===
+- Body word count MUST be 180–220 words (exclude greeting + sign-off lines from the mental budget if needed, but total letter should still feel half-page).
+- Target ~200 words. NEVER exceed 220 words of prose. If over, cut body first.
 
-Prefer British/HK business phrasing where natural. Facts only from Experience Library — never invent.
+=== STRUCTURE (MANDATORY — "\\n\\n" between blocks) ===
+0) Greeting only: Dear Hiring Manager,
+1) INTRO (1 paragraph, 1–2 sentences): State the exact role + company and the single strongest, library-true advantage.
+2) BODY (1 paragraph): Pick ONLY 1–2 most JD-relevant real experiences/projects from the library. In lean language show how they meet the role — no laundry list, no invented tools.
+3) OUTRO (1 paragraph, 1–2 sentences): Interview interest + polite thanks. No lengthy closing rhetoric.
+4) Sign-off: Yours sincerely,\\nWU XUELIAN, KACY
 
 ${
   isRevision
     ? `=== COMMAND EXECUTION AGENT (revision round ${revisionRound}) ===
-You are a Command Execution Agent for Cover Letter edits.
-BASE = Current Cover Letter below (latest accepted version). Start from it; do NOT regenerate from scratch unless notes require a full rewrite.
-Keep the 3-paragraph structure and ~250–300 word budget unless the user explicitly asks otherwise.
-Parse User Revision Notes into atomic commands (split by newlines / ； / ; / numbered lists).
-Execute EVERY command precisely — never skip, drop, or vaguely summarize away a command.
-Preserve strong JD alignment unless a command overrides it.
-Output revisionAlignments[] with ONE entry per command (same order), evidence = short exact English snippet from the NEW letter proving the edit (or "" if blocked).
-note / rationale fields: Simplified Chinese OK; coverLetter body: English only.`
+BASE = Current Cover Letter. Edit incrementally; do not regenerate from scratch unless notes require it.
+Keep 180–220 words and the 3-paragraph structure unless the user explicitly overrides.
+FACT BINDING still applies — never invent skills to satisfy a revision note; use transferable library-true strengths instead.
+Parse User Revision Notes into atomic commands; execute EVERY command; never skip.
+Output revisionAlignments[] (one per command, same order) with evidence = exact English snippet from the NEW letter (or "").
+note: Simplified Chinese OK; coverLetter: English only.`
     : ""
 }
 
@@ -90,6 +96,7 @@ Output STRICT JSON only:
               ? `【Revision Round】${revisionRound}
 
 作为 Command Execution Agent，逐条执行修改指令，基于当前 Cover Letter 增量改写。
+硬性约束：正文保持 180–220 词；严禁虚构履历中不存在的技能/软件/成果；缺项用可迁移能力。
 
 Role: ${jobTitle}
 Company: ${company}
@@ -97,7 +104,7 @@ Company: ${company}
 【JD】
 ${jd.slice(0, 4500)}
 
-【Experience Library】
+【Experience Library / Profile Data — ONLY allowed facts】
 ${resume.slice(0, 7000)}
 
 【Current Cover Letter — BASELINE】
@@ -105,7 +112,10 @@ ${currentCoverLetter.slice(0, 6000)}
 
 【User Revision Commands — EXECUTE EACH】
 ${revisionNotes.slice(0, 2500)}`
-              : `请撰写一封约 250–300 词的精简 Cover Letter（经典 3 段式：开头点明岗位与匹配度；主体融合 2 段最贴合 JD 的经历与成果；结尾表达热情与面试期待）。语言干练紧凑，勿堆砌客套与流水账。
+              : `请撰写 Cover Letter（正文硬性 180–220 词，约半页）：
+- 严禁虚构/夸大履历中没有的技能、软件或成果；JD 缺项时只用履历内可迁移能力，不可捏造。
+- 3 段式：Intro 1–2 句点明岗位与核心优势；Body 仅 1–2 个真实核心经历说明匹配；Outro 1–2 句面试意向与致谢。
+- 删修饰废话与长难句，干练专业。
 
 Role: ${jobTitle}
 Company: ${company}
@@ -113,7 +123,7 @@ Company: ${company}
 【JD】
 ${jd.slice(0, 4500)}
 
-【Experience】
+【Experience Library / Profile Data — ONLY allowed facts】
 ${resume.slice(0, 7000)}`,
           },
         ],
