@@ -892,9 +892,13 @@ export function ResumeGenerator() {
       createdAt: now,
       updatedAt: now,
     };
-    appendApplication(app);
+    const result = appendApplication(app);
     setError("");
-    setSavedHint(`已导入求职进度：${app.company} · ${app.title}`);
+    setSavedHint(
+      result.updated
+        ? `已更新求职进度：${app.company} · ${app.title}`
+        : `已导入求职进度：${app.company} · ${app.title}`
+    );
     setTimeout(() => setSavedHint(""), 2500);
   }
 
@@ -925,9 +929,13 @@ export function ResumeGenerator() {
       createdAt: now,
       updatedAt: now,
     };
-    appendApplication(app);
+    const result = appendApplication(app);
     setError("");
-    setSavedHint(`已追加到求职进度：${app.company} · ${app.title}`);
+    setSavedHint(
+      result.updated
+        ? `已覆盖更新求职进度：${app.company} · ${app.title}`
+        : `已保存到求职进度：${app.company} · ${app.title}`
+    );
     setTimeout(() => setSavedHint(""), 2500);
   }
 

@@ -35,17 +35,17 @@ export function splitCoverParagraphs(text: string): string[] {
 
 /**
  * Word-safe HTML: each paragraph is a real <p> (Word maps these to w:p).
- * Avoids white-space:pre-wrap only (often collapses into one block in Word).
+ * Default: Times New Roman · 小四 (12pt) · paragraph spacing after 12pt.
  */
 export function wrapCoverLetterAsDoc(text: string): string {
   const paras = splitCoverParagraphs(text);
   if (!paras.length) {
-    return `<div class="export-doc cover-letter-doc"><p>&nbsp;</p></div>`;
+    return `<div class="export-doc cover-letter-doc"><p class="cl-p">&nbsp;</p></div>`;
   }
   const html = paras
     .map((p) => {
       const inner = escapeHtml(p).replace(/\n/g, "<br/>");
-      return `<p class="cl-p" style="margin:0 0 12pt 0; line-height:1.5; font-size:12pt; font-family:Arial,Helvetica,sans-serif;">${inner}</p>`;
+      return `<p class="cl-p" style="margin:0 0 12pt 0; mso-margin-top-alt:0; mso-margin-bottom-alt:12.0pt; line-height:150%; font-size:12.0pt; font-family:'Times New Roman',Times,serif;">${inner}</p>`;
     })
     .join("\n");
   return `<div class="export-doc cover-letter-doc">${html}</div>`;

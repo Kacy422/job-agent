@@ -36,7 +36,7 @@ export function exportHtmlPdf(
 html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;}
 .export-doc{padding:24px;font-size:12pt;line-height:1.5;}
 .cover-letter-doc p.cl-p,
-.cover-letter-doc p{margin:0 0 12pt 0;line-height:1.5;font-size:12pt;}
+.cover-letter-doc p{margin:0 0 12pt 0;line-height:150%;font-size:12pt;font-family:'Times New Roman',Times,serif;}
 @media print{
   @page{size:A4 portrait;margin:${isCv ? "0" : "18mm"}}
   ${
@@ -63,28 +63,46 @@ export function wrapPlainAsDoc(text: string) {
 
 export { wrapCoverLetterAsDoc } from "@/lib/cover-letter";
 
-/** Word 兼容 HTML（.doc）— 正文用真实 <p>，避免段落粘连 */
+/** Word 兼容 HTML（.doc）— Cover Letter 默认 Times New Roman 小四(12pt) */
 export function exportHtmlWord(
   bodyHtml: string,
   filename: string,
   typography?: ExportTypography
 ) {
+  const isCover = /cover-letter-doc|class="cl-p"/i.test(bodyHtml);
+  const bodyFont = isCover
+    ? `'Times New Roman',Times,serif`
+    : `Arial,Helvetica,sans-serif`;
+  const bodySize = "12pt";
   const doc = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office"
  xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
 <head><meta charset="utf-8"/><title>${filename}</title>
-<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View></w:WordDocument></xml><![endif]-->
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
 <style>
-${sheetStyles(typography)}
-body{font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.5;}
+${isCover ? "" : sheetStyles(typography)}
+/* Cover Letter style: Times New Roman · 小四(12pt) · paragraph spacing */
+@font-face{
+  font-family:"Times New Roman";
+  panose-1:2 2 6 3 5 4 5 2 3 4;
+}
+body{
+  font-family:${bodyFont};
+  font-size:${bodySize};
+  line-height:150%;
+}
 .export-doc{margin:0;}
 .cover-letter-doc p.cl-p,
 .cover-letter-doc p{
   margin:0 0 12pt 0 !important;
-  line-height:1.5 !important;
-  font-size:12pt !important;
-  font-family:Arial,Helvetica,sans-serif !important;
+  mso-margin-top-alt:0pt;
+  mso-margin-bottom-alt:12.0pt;
+  line-height:150% !important;
+  font-size:12.0pt !important;
+  font-family:"Times New Roman",Times,serif !important;
+  mso-fareast-font-family:"Times New Roman";
+  mso-bidi-font-family:"Times New Roman";
 }
-p{margin:0 0 12pt 0;}
+p{margin:0 0 12pt 0; font-family:${bodyFont}; font-size:${bodySize};}
 </style></head><body>${bodyHtml}</body></html>`;
   const blob = new Blob(["\ufeff", doc], {
     type: "application/msword;charset=utf-8",

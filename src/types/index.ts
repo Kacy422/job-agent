@@ -125,6 +125,40 @@ export function appJobUrl(
   return String(app.jobUrl || app.applyUrl || "").trim();
 }
 
+/** Normalize company / title for duplicate matching */
+export function normalizeJobIdentityPart(s: string): string {
+  return String(s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+/**
+ * Dedup key: prefer job URL when present; otherwise company + title.
+ */
+export function applicationIdentityKey(
+  app: Pick<JobApplication, "company" | "title" | "applyUrl" | "jobUrl">
+): string {
+  const url = appJobUrl(app).toLowerCase().replace(/\/+$/, "");
+  if (url) return `url:${url}`;
+  return `ct:${normalizeJobIdentityPart(app.company)}|${normalizeJobIdentityPart(app.title)}`;
+}
+
+/** Find existing application index by company+title or job URL */
+export function findApplicationIndex(
+  list: JobApplication[],
+  app: Pick<JobApplication, "company" | "title" | "applyUrl" | "jobUrl"> & {
+    id?: string;
+  }
+): number {
+  if (app.id) {
+    const byId = list.findIndex((a) => a.id === app.id);
+    if (byId >= 0) return byId;
+  }
+  const key = applicationIdentityKey(app);
+  return list.findIndex((a) => applicationIdentityKey(a) === key);
+}
+
 /** 画像条目（教育/实习/项目） */
 export interface ProfileEntry {
   id: string;

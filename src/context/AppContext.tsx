@@ -20,6 +20,7 @@ import {
 import {
   DEFAULT_PROFILE_FROM_CV,
   EMPTY_CV_RATIONALE,
+  findApplicationIndex,
   normalizeCvRationale,
   pipelineToTrackStatus,
   type ApplyPack,
@@ -52,7 +53,7 @@ interface AppState {
   upsertApplication: (app: JobApplication) => void;
   appendApplication: (
     app: Omit<JobApplication, "id"> & { id?: string }
-  ) => string;
+  ) => { id: string; updated: boolean };
   updateApplication: (id: string, patch: Partial<JobApplication>) => void;
   removeApplication: (id: string) => void;
   draftJd: string;
@@ -437,17 +438,86 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const appendApplication = useCallback(
     (app: Omit<JobApplication, "id"> & { id?: string }) => {
-      const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      const record: JobApplication = {
-        ...app,
-        id,
-        createdAt: app.createdAt || now,
-        updatedAt: now,
-      };
-      setApplications((prev) => [record, ...prev]);
-      setSelectedAppId(id);
-      return id;
+      const out = { id: "", updated: false };
+
+      setApplications((prev) => {
+        const idx = findApplicationIndex(prev, {
+          id: app.id,
+          company: app.company,
+          title: app.title,
+          applyUrl: app.applyUrl,
+          jobUrl: app.jobUrl,
+        });
+
+        if (idx >= 0) {
+          const existing = prev[idx];
+          out.id = existing.id;
+          out.updated = true;
+          const jdNext =
+            app.jd !== undefined && String(app.jd).trim() !== ""
+              ? app.jd
+              : existing.jd;
+          const merged: JobApplication = {
+            ...existing,
+            company: app.company || existing.company,
+            title: app.title || existing.title,
+            jd: jdNext,
+            jdText:
+              app.jdText !== undefined
+                ? app.jdText
+                : app.jd !== undefined && String(app.jd).trim() !== ""
+                  ? app.jd
+                  : existing.jdText,
+            applyUrl:
+              app.applyUrl !== undefined
+                ? app.applyUrl
+                : app.jobUrl !== undefined
+                  ? app.jobUrl
+                  : existing.applyUrl,
+            jobUrl:
+              app.jobUrl !== undefined
+                ? app.jobUrl
+                : app.applyUrl !== undefined
+                  ? app.applyUrl
+                  : existing.jobUrl,
+            cvHtml: app.cvHtml !== undefined ? app.cvHtml : existing.cvHtml,
+            coverLetter:
+              app.coverLetter !== undefined
+                ? app.coverLetter
+                : existing.coverLetter,
+            rationale:
+              app.rationale !== undefined
+                ? app.rationale
+                : existing.rationale,
+            interviewQA:
+              app.interviewQA !== undefined
+                ? app.interviewQA
+                : existing.interviewQA,
+            trackStatus: existing.trackStatus || app.trackStatus || "preparing",
+            id: existing.id,
+            createdAt: existing.createdAt,
+            updatedAt: now,
+          };
+          const next = [...prev];
+          next[idx] = merged;
+          return next;
+        }
+
+        const id = app.id || crypto.randomUUID();
+        out.id = id;
+        out.updated = false;
+        const record: JobApplication = {
+          ...app,
+          id,
+          createdAt: app.createdAt || now,
+          updatedAt: now,
+        };
+        return [record, ...prev];
+      });
+
+      setSelectedAppId(out.id);
+      return { id: out.id, updated: out.updated };
     },
     []
   );
