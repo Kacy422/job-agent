@@ -9,6 +9,7 @@ import {
   type ProfileData,
 } from "@/types";
 import { migrateToProfile } from "@/lib/experience";
+import { normalizeDeadline } from "@/lib/deadline";
 
 /** Serializable blob stored in Redis + localStorage cache */
 export interface WorkspaceSnapshot {
@@ -21,6 +22,8 @@ export interface WorkspaceSnapshot {
   draftJobUrl: string;
   draftCompany: string;
   draftTitle: string;
+  /** Application deadline draft — prefer YYYY-MM-DD */
+  draftDeadline: string;
   tailoredResume: string;
   generationSourceKey: string | null;
   rationale: CvRationale;
@@ -43,6 +46,7 @@ export function emptyWorkspaceSnapshot(): WorkspaceSnapshot {
     draftJobUrl: "",
     draftCompany: "",
     draftTitle: "",
+    draftDeadline: "",
     tailoredResume: "",
     generationSourceKey: null,
     rationale: { ...EMPTY_CV_RATIONALE },
@@ -59,6 +63,7 @@ function jobToApplication(j: Job): JobApplication {
     title: j.title || "",
     jd: j.description || "",
     applyUrl: j.applyUrl || j.url || "",
+    deadline: j.deadline || undefined,
     cvHtml: j.tailoredResume?.includes("cv-sheet")
       ? j.tailoredResume
       : undefined,
@@ -89,6 +94,7 @@ export function normalizeWorkspaceSnapshot(raw: unknown): WorkspaceSnapshot {
         jdText: String(a.jdText || a.jd || ""),
         applyUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
         jobUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
+        deadline: normalizeDeadline(a.deadline) || undefined,
         // 旧「网申中」(applying) → 「准备中」(preparing)
         trackStatus: (() => {
           const raw = String(a.trackStatus || "");
@@ -126,6 +132,8 @@ export function normalizeWorkspaceSnapshot(raw: unknown): WorkspaceSnapshot {
     base.draftCompany = parsed.draftCompany;
   if (typeof parsed.draftTitle === "string")
     base.draftTitle = parsed.draftTitle;
+  if (typeof parsed.draftDeadline === "string")
+    base.draftDeadline = parsed.draftDeadline;
   if (typeof parsed.tailoredResume === "string")
     base.tailoredResume = parsed.tailoredResume;
   if (typeof parsed.generationSourceKey === "string") {

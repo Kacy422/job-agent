@@ -1,16 +1,21 @@
 import { callDeepSeek, extractJson, getDeepSeekKey } from "@/lib/deepseek";
 import { heuristicParse, parseHintsFromUrl } from "@/lib/scrape";
 import { sanitizeJobMeta } from "@/lib/job-meta";
+import {
+  extractDeadlineFromText,
+  normalizeDeadline,
+} from "@/lib/deadline";
 import type { ParsedJobPage } from "@/types";
 
 const EXTRACT_SYSTEM = `你是招聘信息抽取专家。从网页正文 / 粘贴 JD / URL 线索提取岗位信息，输出严格 JSON：
-{"title":"岗位名称","company":"公司名","location":"地点","salary":"薪资或面议","description":"完整 JD 文本（必须保留原有换行与分段，用 \\n 表示换行，不要压成单行）","keywords":["技能/职责关键词最多12个"],"applyUrl":"若文中有独立网申链接则给出，否则空字符串"}
+{"title":"岗位名称","company":"公司名","location":"地点","salary":"薪资或面议","deadline":"申请截止日期优先 YYYY-MM-DD，无则空字符串","description":"完整 JD 文本（必须保留原有换行与分段，用 \\n 表示换行，不要压成单行）","keywords":["技能/职责关键词最多12个"],"applyUrl":"若文中有独立网申链接则给出，否则空字符串"}
 
 === 字段边界（必须严格遵守，禁止混淆）===
 1) company：仅品牌 / 公司 / 集团名（如 Kering、Qeelin、Kering / Qeelin、Google、Crossroads Foundation）。
 2) title：仅岗位职能名（如 ESG and Sustainability Intern、Sustainability Analyst）。不要把公司名写进 title。
 3) location：城市/地区（Hong Kong、HK、China、Shanghai、Singapore 等）—— 只能放在 location。
 4) employment type（Full-time / Part-time / Internship / Remote / Hybrid / Contract）不是公司名，也不是岗位名；可忽略或写入 description，禁止写入 company / title。
+5) deadline：仅申请截止日（Application Deadline / Closing Date / 截止日期）。优先输出 YYYY-MM-DD；文中无明确日期则空字符串，禁止编造。
 
 === 严禁误判（反例）===
 - 禁止 company = "HK" / "Hong Kong" / "China" / "Full-time" / "Remote"
@@ -75,11 +80,18 @@ ${pageText.slice(0, 14000)}`,
       Object.assign(clean, fromUrl);
     }
 
+    const deadline =
+      normalizeDeadline(parsed.deadline) ||
+      fallback.deadline ||
+      extractDeadlineFromText(pageText) ||
+      "";
+
     return {
       title: clean.title,
       company: clean.company,
       location: clean.location,
       salary: (parsed.salary || fallback.salary).slice(0, 60),
+      deadline: deadline || undefined,
       description: (parsed.description || fallback.description).slice(0, 12000),
       keywords: Array.isArray(parsed.keywords)
         ? parsed.keywords.slice(0, 12)

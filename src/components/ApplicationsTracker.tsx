@@ -28,6 +28,12 @@ import {
   type TrackStatus,
 } from "@/types";
 import {
+  deadlineUrgencyClass,
+  formatDeadlineLabel,
+  getDeadlineUrgency,
+  normalizeDeadline,
+} from "@/lib/deadline";
+import {
   STATUS_FILTER_OPTIONS,
   TRACK_STATUSES,
   computeApplicationStats,
@@ -69,6 +75,7 @@ export function ApplicationsTracker() {
     setDraftJobUrl,
     setDraftCompany,
     setDraftTitle,
+    setDraftDeadline,
     setTailoredResume,
     setCoverLetter,
     setInterviewQA,
@@ -102,6 +109,7 @@ export function ApplicationsTracker() {
     setDraftJobUrl(url);
     setDraftCompany(app.company || "");
     setDraftTitle(app.title || "");
+    setDraftDeadline(normalizeDeadline(app.deadline) || "");
     setTailoredResume(regenerate ? "" : app.cvHtml || "");
     setCoverLetter(regenerate ? "" : app.coverLetter || "");
     setInterviewQA(regenerate ? [] : app.interviewQA || []);
@@ -275,7 +283,7 @@ export function ApplicationsTracker() {
       {/* ——— Linear Table ——— */}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm backdrop-blur-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[1100px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80">
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -283,6 +291,9 @@ export function ApplicationsTracker() {
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   岗位
+                </th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  截止日期
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   当前状态
@@ -301,7 +312,7 @@ export function ApplicationsTracker() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-16 text-center">
+                  <td colSpan={7} className="px-4 py-16 text-center">
                     <LayoutList className="mx-auto h-8 w-8 text-slate-300" />
                     <p className="mt-3 text-sm font-medium text-slate-700">
                       当前筛选下暂无记录
@@ -352,6 +363,58 @@ export function ApplicationsTracker() {
                         <p className="max-w-[220px] truncate text-sm text-slate-700">
                           {app.title || "未命名岗位"}
                         </p>
+                      </td>
+                      <td className="px-4 py-3.5 align-middle">
+                        {(() => {
+                          const urgency = getDeadlineUrgency(app.deadline);
+                          if (urgency === "none") {
+                            return (
+                              <input
+                                type="date"
+                                value=""
+                                onChange={(e) =>
+                                  updateApplication(app.id, {
+                                    deadline:
+                                      normalizeDeadline(e.target.value) ||
+                                      undefined,
+                                  })
+                                }
+                                className="rounded-md border border-dashed border-slate-200 bg-transparent px-1.5 py-1 text-[11px] text-slate-400 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-500/20"
+                                aria-label="设置截止日期"
+                                title="设置截止日期"
+                              />
+                            );
+                          }
+                          return (
+                            <div className="flex flex-col gap-1">
+                              <span
+                                className={`inline-flex w-fit max-w-[160px] items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${deadlineUrgencyClass(urgency)}`}
+                                title={formatDeadlineLabel(app.deadline)}
+                              >
+                                {formatDeadlineLabel(app.deadline)}
+                              </span>
+                              <input
+                                type="date"
+                                value={
+                                  /^\d{4}-\d{2}-\d{2}$/.test(
+                                    normalizeDeadline(app.deadline)
+                                  )
+                                    ? normalizeDeadline(app.deadline)
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  updateApplication(app.id, {
+                                    deadline:
+                                      normalizeDeadline(e.target.value) ||
+                                      undefined,
+                                  })
+                                }
+                                className="w-[132px] rounded border border-transparent bg-transparent text-[10px] text-slate-400 outline-none hover:border-slate-200 focus:border-indigo-300"
+                                aria-label="修改截止日期"
+                              />
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3.5 align-middle">
                         <select

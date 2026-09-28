@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { sanitizeJobMeta } from "@/lib/job-meta";
+import { extractDeadlineFromText } from "@/lib/deadline";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -391,6 +392,7 @@ export function heuristicParse(
     company: clean.company.slice(0, 80),
     location: clean.location,
     salary: guessSalary(text),
+    deadline: extractDeadlineFromText(text),
     description: text.slice(0, 12000),
     keywords: extractKeywordCandidates(text),
   };

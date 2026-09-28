@@ -97,6 +97,8 @@ export interface JobApplication {
   applyUrl?: string;
   /** Explicit alias of applyUrl */
   jobUrl?: string;
+  /** Application deadline — prefer YYYY-MM-DD */
+  deadline?: string;
   cvHtml?: string;
   coverLetter?: string;
   rationale?: CvRationale;
@@ -374,6 +376,8 @@ export interface Job {
   company: string;
   location: string;
   salary: string;
+  /** Application deadline if known (YYYY-MM-DD preferred) */
+  deadline?: string;
   source: string;
   tags: string[];
   description: string;
@@ -412,6 +416,8 @@ export interface ParsedJobPage {
   company: string;
   location: string;
   salary: string;
+  /** Application deadline if found (YYYY-MM-DD preferred) */
+  deadline?: string;
   description: string;
   keywords: string[];
   applyUrl?: string;

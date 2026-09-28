@@ -108,6 +108,7 @@ export async function POST(req: Request) {
       company: extracted.company,
       location: extracted.location,
       salary: extracted.salary,
+      deadline: extracted.deadline || undefined,
       source,
       tags: extracted.keywords.slice(0, 6),
       description,

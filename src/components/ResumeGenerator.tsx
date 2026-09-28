@@ -51,6 +51,10 @@ import {
 } from "@/lib/export";
 import { isValidCompanyName, isValidJobTitle } from "@/lib/job-meta";
 import {
+  extractDeadlineFromText,
+  normalizeDeadline,
+} from "@/lib/deadline";
+import {
   EMPTY_CV_RATIONALE,
   isCvRationaleEmpty,
   normalizeCvRationale,
@@ -83,6 +87,8 @@ export function ResumeGenerator() {
     setDraftCompany,
     draftTitle,
     setDraftTitle,
+    draftDeadline,
+    setDraftDeadline,
     tailoredResume,
     setTailoredResume,
     rationale,
@@ -310,9 +316,15 @@ export function ResumeGenerator() {
     return text.replace(/\s+/g, "").length;
   }
 
-  function applyParsedMeta(company: string, title: string) {
+  function applyParsedMeta(
+    company: string,
+    title: string,
+    deadline?: string
+  ) {
     if (isValidCompanyName(company)) setDraftCompany(company.trim());
     if (isValidJobTitle(title)) setDraftTitle(title.trim());
+    const d = normalizeDeadline(deadline);
+    if (d) setDraftDeadline(d);
   }
 
   /**
@@ -388,8 +400,13 @@ export function ResumeGenerator() {
       const title = String(
         job.title || data.title || data.jobTitle || ""
       ).trim();
+      const deadline = String(job.deadline || data.deadline || "").trim();
 
-      applyParsedMeta(company, title);
+      applyParsedMeta(
+        company,
+        title,
+        deadline || extractDeadlineFromText(jd)
+      );
       fillJdFromUrlParse(jd);
 
       if (jd && meaningfulTextLen(jd) >= 40) {
@@ -417,6 +434,7 @@ export function ResumeGenerator() {
     jd: string;
     company?: string;
     title?: string;
+    deadline?: string;
     applyUrl?: string;
     softFallback?: boolean;
     hint?: string;
@@ -460,8 +478,13 @@ export function ResumeGenerator() {
     const title = String(
       job.title || data.title || data.jobTitle || ""
     ).trim();
+    const deadline = String(job.deadline || data.deadline || "").trim();
 
-    applyParsedMeta(company, title);
+    applyParsedMeta(
+      company,
+      title,
+      deadline || extractDeadlineFromText(jd || draftJd)
+    );
 
     // Cache scraped JD; URL path also fills the textarea via caller
     if (source === "url" && jd) {
@@ -488,6 +511,10 @@ export function ResumeGenerator() {
       jd: finalJd,
       company: isValidCompanyName(company) ? company : undefined,
       title: isValidJobTitle(title) ? title : undefined,
+      deadline:
+        normalizeDeadline(deadline) ||
+        extractDeadlineFromText(finalJd) ||
+        undefined,
       applyUrl: finalUrl,
       softFallback,
       hint: hint || (softFallback ? SHORT_JD_HINT : undefined),
@@ -917,6 +944,7 @@ export function ResumeGenerator() {
     title: string;
     jdText: string;
     jobUrl: string;
+    deadline: string;
   } {
     const jdText = (draftJd.trim() || cachedParsedJd.trim()).trim();
     const jobUrl = draftJobUrl.trim()
@@ -927,12 +955,13 @@ export function ResumeGenerator() {
       title: draftTitle.trim() || "未命名岗位",
       jdText,
       jobUrl,
+      deadline: normalizeDeadline(draftDeadline),
     };
   }
 
   /** 仅凭公司/岗位/JD/链接即可导入看板（无需已生成 CV） */
   function importJobToTracker() {
-    const { company, title, jdText, jobUrl } = resolveTrackerPayload();
+    const { company, title, jdText, jobUrl, deadline } = resolveTrackerPayload();
     if (
       company === "未命名公司" &&
       title === "未命名岗位" &&
@@ -950,6 +979,7 @@ export function ResumeGenerator() {
       jdText,
       applyUrl: jobUrl || undefined,
       jobUrl: jobUrl || undefined,
+      deadline: deadline || undefined,
       trackStatus: "preparing",
       createdAt: now,
       updatedAt: now,
@@ -974,7 +1004,7 @@ export function ResumeGenerator() {
       setError("暂无材料可保存，请先生成 CV / Cover Letter / 面试题；或使用「导入求职进度」仅归档岗位");
       return;
     }
-    const { company, title, jdText, jobUrl } = resolveTrackerPayload();
+    const { company, title, jdText, jobUrl, deadline } = resolveTrackerPayload();
     const now = new Date().toISOString();
     const app: Omit<JobApplication, "id"> = {
       company,
@@ -983,6 +1013,7 @@ export function ResumeGenerator() {
       jdText,
       applyUrl: jobUrl || undefined,
       jobUrl: jobUrl || undefined,
+      deadline: deadline || undefined,
       cvHtml: liveHtml ? stripReviewMarks(liveHtml) : undefined,
       coverLetter: coverLetter || undefined,
       rationale: isCvRationaleEmpty(rationale) ? undefined : rationale,
@@ -1175,21 +1206,45 @@ export function ResumeGenerator() {
               </p>
             </div>
 
-            <div className="mb-3 grid gap-2">
+            <div className="mb-3 grid gap-2 sm:grid-cols-2">
               <input
                 value={draftCompany}
                 onChange={(e) => setDraftCompany(e.target.value)}
                 placeholder="公司（点击下方识别按钮填入）"
                 aria-label="公司"
-                className="soft-input"
+                className="soft-input sm:col-span-1"
               />
               <input
                 value={draftTitle}
                 onChange={(e) => setDraftTitle(e.target.value)}
                 placeholder="岗位（可手动修改）"
                 aria-label="岗位"
-                className="soft-input"
+                className="soft-input sm:col-span-1"
               />
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-[11px] font-medium text-slate-500">
+                  截止日期（Deadline）
+                </label>
+                <input
+                  type="date"
+                  value={
+                    /^\d{4}-\d{2}-\d{2}$/.test(draftDeadline)
+                      ? draftDeadline
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setDraftDeadline(normalizeDeadline(e.target.value))
+                  }
+                  aria-label="截止日期"
+                  className="soft-input max-w-xs"
+                />
+                {draftDeadline &&
+                  !/^\d{4}-\d{2}-\d{2}$/.test(draftDeadline) && (
+                    <p className="mt-1 text-[10px] text-amber-700">
+                      当前值：{draftDeadline}（请用日期选择器修正）
+                    </p>
+                  )}
+              </div>
             </div>
 
             <div className="mb-1 flex items-center justify-between gap-2">

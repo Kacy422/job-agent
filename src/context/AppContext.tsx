@@ -68,6 +68,8 @@ interface AppState {
   setDraftCompany: (v: string) => void;
   draftTitle: string;
   setDraftTitle: (v: string) => void;
+  draftDeadline: string;
+  setDraftDeadline: (v: string) => void;
   tailoredResume: string;
   setTailoredResume: (v: string) => void;
   generationSourceKey: string | null;
@@ -111,6 +113,7 @@ function jobToApplication(j: Job): JobApplication {
     title: j.title || "",
     jd: j.description || "",
     applyUrl: j.applyUrl || j.url || "",
+    deadline: j.deadline || undefined,
     cvHtml: j.tailoredResume?.includes("cv-sheet")
       ? j.tailoredResume
       : undefined,
@@ -131,6 +134,7 @@ function applySnapshot(
     setDraftJobUrl: (v: string) => void;
     setDraftCompany: (v: string) => void;
     setDraftTitle: (v: string) => void;
+    setDraftDeadline: (v: string) => void;
     setTailoredResume: (v: string) => void;
     setGenerationSourceKey: (k: string | null) => void;
     setRationale: (v: CvRationale) => void;
@@ -146,6 +150,7 @@ function applySnapshot(
   setters.setDraftJobUrl(snap.draftJobUrl);
   setters.setDraftCompany(snap.draftCompany);
   setters.setDraftTitle(snap.draftTitle);
+  setters.setDraftDeadline(snap.draftDeadline);
   setters.setTailoredResume(snap.tailoredResume);
   setters.setGenerationSourceKey(snap.generationSourceKey);
   setters.setRationale(snap.rationale);
@@ -165,6 +170,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [draftJobUrl, setDraftJobUrl] = useState("");
   const [draftCompany, setDraftCompany] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
+  const [draftDeadline, setDraftDeadline] = useState("");
   const [tailoredResume, setTailoredResume] = useState("");
   const [generationSourceKey, setGenerationSourceKey] = useState<string | null>(
     null
@@ -198,6 +204,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       draftJobUrl,
       draftCompany,
       draftTitle,
+      draftDeadline,
       tailoredResume,
       generationSourceKey,
       rationale,
@@ -214,6 +221,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     draftJobUrl,
     draftCompany,
     draftTitle,
+    draftDeadline,
     tailoredResume,
     generationSourceKey,
     rationale,
@@ -236,6 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setDraftJobUrl,
         setDraftCompany,
         setDraftTitle,
+        setDraftDeadline,
         setTailoredResume,
         setGenerationSourceKey,
         setRationale,
@@ -531,6 +540,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 : app.applyUrl !== undefined
                   ? app.applyUrl
                   : existing.jobUrl,
+            deadline:
+              app.deadline !== undefined
+                ? app.deadline
+                : existing.deadline,
             cvHtml: app.cvHtml !== undefined ? app.cvHtml : existing.cvHtml,
             coverLetter:
               app.coverLetter !== undefined
@@ -713,6 +726,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setDraftCompany,
       draftTitle,
       setDraftTitle,
+      draftDeadline,
+      setDraftDeadline,
       tailoredResume,
       setTailoredResume,
       generationSourceKey,
@@ -762,6 +777,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       draftJobUrl,
       draftCompany,
       draftTitle,
+      draftDeadline,
       tailoredResume,
       generationSourceKey,
       rationale,
