@@ -4,10 +4,9 @@ import {
   type TrackStatus,
 } from "@/types";
 
-/** 求职进度可选状态（顺序固定） */
+/** 求职进度可选状态（已移除「网申中」） */
 export const TRACK_STATUSES: TrackStatus[] = [
   "preparing",
-  "applying",
   "applied",
   "interview",
 ];
@@ -24,13 +23,16 @@ export const STATUS_FILTER_OPTIONS: { id: StatusFilter; label: string }[] = [
   })),
 ];
 
-/** 规范化 trackStatus，非法值回退为 preparing */
+/**
+ * 规范化 trackStatus。
+ * 旧数据 "applying"（网申中）平滑归入 "preparing"（准备中）。
+ */
 export function normalizeTrackStatus(
   status: string | undefined | null
 ): TrackStatus {
+  if (status === "applying") return "preparing";
   if (
     status === "preparing" ||
-    status === "applying" ||
     status === "applied" ||
     status === "interview"
   ) {
@@ -46,7 +48,6 @@ export function computeApplicationStats(apps: JobApplication[]): {
 } {
   const counts: StatusCounts = {
     preparing: 0,
-    applying: 0,
     applied: 0,
     interview: 0,
   };

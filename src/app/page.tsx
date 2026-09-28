@@ -20,7 +20,7 @@ export default function HomePage() {
         {tab === "apply" && <AutoApply />}
       </main>
       <footer className="border-t border-white/50 py-6 text-center text-xs tracking-wide text-slate-500">
-        JobAgent · 人物画像 → 专属简历 → 求职进度 · 数据同步至云端 Redis
+        JobAgent · 求职进度 → 人物画像 → 专属简历 · 数据同步至云端 Redis
       </footer>
     </div>
   );

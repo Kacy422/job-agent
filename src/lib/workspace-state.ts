@@ -89,6 +89,13 @@ export function normalizeWorkspaceSnapshot(raw: unknown): WorkspaceSnapshot {
         jdText: String(a.jdText || a.jd || ""),
         applyUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
         jobUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
+        // 旧「网申中」(applying) → 「准备中」(preparing)
+        trackStatus: (() => {
+          const raw = String(a.trackStatus || "");
+          if (raw === "applied" || raw === "interview") return raw;
+          // applying / preparing / unknown → preparing
+          return "preparing";
+        })(),
       })
     );
   } else if (Array.isArray(parsed.jobs)) {

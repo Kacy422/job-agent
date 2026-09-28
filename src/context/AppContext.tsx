@@ -155,7 +155,7 @@ function applySnapshot(
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [tab, setTab] = useState<TabId>("profile");
+  const [tab, setTab] = useState<TabId>("board");
   const [profile, setProfile] = useState<ProfileData>(() =>
     structuredClone(DEFAULT_PROFILE_FROM_CV)
   );
@@ -635,13 +635,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
               ? "interview"
               : a.trackStatus === "applied"
                 ? "submitted"
-                : a.trackStatus === "applying"
-                  ? "filling"
-                  : "resume_ready",
+                : "resume_ready",
           status:
             a.trackStatus === "interview"
               ? "interview"
-              : a.trackStatus === "applied" || a.trackStatus === "applying"
+              : a.trackStatus === "applied"
                 ? "applied"
                 : "wishlist",
           createdAt: a.createdAt,

@@ -1,13 +1,8 @@
-/** 求职进度 · 网申状态 */
-export type TrackStatus =
-  | "preparing"
-  | "applying"
-  | "applied"
-  | "interview";
+/** 求职进度 · 网申状态（已移除「网申中」，与准备中合并） */
+export type TrackStatus = "preparing" | "applied" | "interview";
 
 export const TRACK_LABEL: Record<TrackStatus, string> = {
   preparing: "准备中",
-  applying: "网申中",
   applied: "网申完成",
   interview: "收到面试",
 };
@@ -476,7 +471,8 @@ export function pipelineToLegacyStatus(p: PipelineStatus): JobStatus {
 export function pipelineToTrackStatus(p: PipelineStatus): TrackStatus {
   switch (p) {
     case "filling":
-      return "applying";
+      // 旧「网申中」并入「准备中」
+      return "preparing";
     case "filled":
     case "submitted":
     case "apply_ready":

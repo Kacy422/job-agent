@@ -46,14 +46,12 @@ import {
 
 const STATUS_STYLE: Record<TrackStatus, string> = {
   preparing: "bg-slate-100 text-slate-700 border-slate-200/80",
-  applying: "bg-amber-50 text-amber-800 border-amber-200/80",
   applied: "bg-emerald-50 text-emerald-800 border-emerald-200/80",
   interview: "bg-violet-50 text-violet-800 border-violet-200/80",
 };
 
 const STATUS_DOT: Record<TrackStatus, string> = {
   preparing: "bg-slate-400",
-  applying: "bg-amber-500",
   applied: "bg-emerald-500",
   interview: "bg-violet-500",
 };
@@ -199,7 +197,7 @@ export function ApplicationsTracker() {
       />
 
       {/* ——— Metrics Cards ——— */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <button
           type="button"
           onClick={() => setStatusFilter("all")}
