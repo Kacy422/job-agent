@@ -25,18 +25,12 @@ function formatEntries(title: string, entries: ProfileEntry[]): string {
 
 export function buildFullExperienceFromProfile(profile: ProfileData): string {
   const parts: string[] = [];
-  const contact = [
-    profile.contactName,
-    profile.contactPhone,
-    profile.contactEmail,
-    profile.contactAddress,
-    profile.workVisaStatus,
-  ]
+  const contact = [profile.contactName, profile.contactPhone, profile.contactEmail]
     .map((s) => s.trim())
     .filter(Boolean);
   if (contact.length) {
     parts.push(
-      `# Contact (CV header line — join with " | ")\nName: ${profile.contactName.trim() || "WU XUELIAN, KACY"}\nPhone: ${profile.contactPhone.trim() || "+852 65733452"}\nEmail: ${profile.contactEmail.trim() || "wuxuelian25@126.com"}\nAddress: ${profile.contactAddress.trim() || "Hong Kong"}\nVisa / Work Authorization: ${profile.workVisaStatus.trim() || "IANG Visa"}\nFormat cv-contact exactly like: +852 65733452 | wuxuelian25@126.com | Hong Kong | IANG Visa`
+      `# Contact (CV header — phone | email ONLY; never Address or Visa)\nName: ${profile.contactName.trim() || "WU XUELIAN, KACY"}\nPhone: ${profile.contactPhone.trim() || "+852 65733452"}\nEmail: ${profile.contactEmail.trim() || "wuxuelian25@126.com"}\nFormat cv-contact exactly: +852 65733452 | wuxuelian25@126.com`
     );
   }
   const edu = formatEntries("Education", profile.education);

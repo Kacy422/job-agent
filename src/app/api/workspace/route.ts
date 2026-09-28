@@ -113,33 +113,43 @@ export async function PUT(req: Request) {
 
     const redis = getRedis()!;
     const key = workspaceRedisKey();
+    const payload = JSON.stringify(snapshot);
 
-    // Explicit JSON string avoids rare double-encode edge cases across SDK versions
-    await redis.set(key, JSON.stringify(snapshot));
-
-    // Verify write (ensures multi-device can read what we just saved)
-    const verify = await redis.get(key);
-    if (verify == null) {
+    // Guard against oversized payloads (Upstash free tier ~1MB typical)
+    const bytes = Buffer.byteLength(payload, "utf8");
+    if (bytes > 900_000) {
       return NextResponse.json(
-        { ok: false, error: "写入 Redis 后校验失败（值为空）" },
-        { status: 500 }
+        {
+          ok: false,
+          error: `工作区数据过大（约 ${Math.round(bytes / 1024)}KB）。请删减旧求职记录中的 CV / Cover Letter 后重试。`,
+        },
+        { status: 413 }
       );
     }
+
+    await redis.set(key, payload);
 
     return NextResponse.json({
       ok: true,
       configured: true,
       key,
       updatedAt: snapshot.updatedAt,
+      bytes,
     });
   } catch (err) {
     console.error("[workspace PUT]", err);
+    const msg = err instanceof Error ? err.message : "写入 Redis 失败";
+    const isTimeout = /timeout|ETIMEDOUT|ECONNRESET|Command timed out/i.test(
+      msg
+    );
     return NextResponse.json(
       {
         ok: false,
-        error: err instanceof Error ? err.message : "写入 Redis 失败",
+        error: isTimeout
+          ? "云端存储超时，请稍后重试（本机缓存已保留）"
+          : msg,
       },
-      { status: 500 }
+      { status: isTimeout ? 504 : 500 }
     );
   }
 }

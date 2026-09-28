@@ -24,12 +24,18 @@ export function getRedis(): Redis | null {
   }
 
   try {
-    // Direct connection string — matches Vercel auto-injected REDIS_URL
     cached = new Redis(url, {
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: true,
+      maxRetriesPerRequest: 2,
+      enableReadyCheck: false,
+      connectTimeout: 8_000,
+      commandTimeout: 12_000,
+      keepAlive: 10_000,
       // Reuse across warm serverless invocations
       lazyConnect: false,
+      retryStrategy(times) {
+        if (times > 3) return null;
+        return Math.min(times * 200, 1000);
+      },
     });
 
     cached.on("error", (err) => {

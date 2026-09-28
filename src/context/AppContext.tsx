@@ -12,6 +12,10 @@ import {
 } from "react";
 import { buildFullExperienceFromProfile, syncEducationGpa } from "@/lib/experience";
 import {
+  fetchWithRetry,
+  formatFetchError,
+} from "@/lib/fetch-retry";
+import {
   normalizeWorkspaceSnapshot,
   readLocalWorkspaceCache,
   writeLocalWorkspaceCache,
@@ -243,7 +247,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const local = readLocalWorkspaceCache();
 
       try {
-        const res = await fetch("/api/workspace", { cache: "no-store" });
+        const res = await fetchWithRetry(
+          "/api/workspace",
+          { cache: "no-store" },
+          { timeoutMs: 20_000, retries: 2 }
+        );
         const json = await res.json().catch(() => ({}));
         if (cancelled) return;
 
@@ -259,18 +267,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setSyncError(
             String(
               json.error ||
-                "Redis 未配置。请在 Vercel 绑定 Upstash 并设置 REST URL/TOKEN"
+                "Redis 未配置。请在 Vercel 绑定 Upstash 并设置 REDIS_URL"
             )
           );
         } else if (json.empty || (res.ok && !json.data)) {
           if (local) {
             applySnapshot(local, setters);
             try {
-              const put = await fetch("/api/workspace", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(local),
-              });
+              const put = await fetchWithRetry(
+                "/api/workspace",
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(local),
+                },
+                { timeoutMs: 45_000, retries: 2 }
+              );
               const putJson = await put.json().catch(() => ({}));
               if (put.ok && putJson.ok) {
                 setSyncStatus("synced");
@@ -278,12 +290,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
               } else {
                 setSyncStatus("error");
                 setSyncError(
-                  String(putJson.error || "首次上传本机数据到云端失败")
+                  String(
+                    putJson.error ||
+                      (put.status === 413
+                        ? "云端数据过大，请删减旧 CV 记录后重试"
+                        : "首次上传本机数据到云端失败，请点击 Save 重试")
+                  )
                 );
               }
-            } catch {
+            } catch (err) {
               setSyncStatus("error");
-              setSyncError("首次上传本机数据到云端失败");
+              setSyncError(
+                formatFetchError(err, "首次上传本机数据到云端失败，请点击 Save 重试")
+              );
             }
           } else {
             setProfile(structuredClone(DEFAULT_PROFILE_FROM_CV));
@@ -291,11 +310,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
               const snap = normalizeWorkspaceSnapshot({
                 profile: structuredClone(DEFAULT_PROFILE_FROM_CV),
               });
-              await fetch("/api/workspace", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(snap),
-              });
+              await fetchWithRetry(
+                "/api/workspace",
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(snap),
+                },
+                { timeoutMs: 30_000, retries: 1 }
+              );
             } catch {
               /* ignore seed failure */
             }
@@ -307,11 +330,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setSyncStatus("error");
           setSyncError(String(json.error || "读取云端数据失败"));
         }
-      } catch {
+      } catch (err) {
         if (cancelled) return;
         if (local) applySnapshot(local, setters);
         setSyncStatus("offline");
-        setSyncError("无法连接云端 API，已临时使用本机缓存");
+        setSyncError(
+          formatFetchError(err, "无法连接云端 API，已临时使用本机缓存")
+        );
       }
 
       if (!cancelled) {
@@ -341,11 +366,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveTimerRef.current = setTimeout(async () => {
       setSyncStatus("saving");
       try {
-        const res = await fetch("/api/workspace", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(snapshot),
-        });
+        const res = await fetchWithRetry(
+          "/api/workspace",
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(snapshot),
+          },
+          { timeoutMs: 45_000, retries: 2, retryDelayMs: 800 }
+        );
         const json = await res.json().catch(() => ({}));
         if (res.ok && json.ok) {
           setSyncStatus("synced");
@@ -355,13 +384,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setSyncError(String(json.error || "Redis 未配置"));
         } else {
           setSyncStatus("error");
-          setSyncError(String(json.error || "保存到云端失败"));
+          setSyncError(
+            String(
+              json.error ||
+                (res.status === 413
+                  ? "云端数据过大，请删减旧 CV 记录后重试"
+                  : "保存到云端失败，请点击 Save 重试")
+            )
+          );
         }
-      } catch {
+      } catch (err) {
         setSyncStatus("error");
-        setSyncError("保存到云端失败（已写入本机缓存作备份）");
+        setSyncError(
+          formatFetchError(err, "保存到云端失败（已写入本机缓存作备份）")
+        );
       }
-    }, 500);
+    }, 1200);
 
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -373,11 +411,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     writeLocalWorkspaceCache(snapshot);
     setSyncStatus("saving");
     try {
-      const res = await fetch("/api/workspace", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(snapshot),
-      });
+      const res = await fetchWithRetry(
+        "/api/workspace",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(snapshot),
+        },
+        { timeoutMs: 45_000, retries: 2, retryDelayMs: 800 }
+      );
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.ok) {
         setSyncStatus("synced");
@@ -390,12 +432,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSyncError(error);
         return { ok: false as const, error };
       }
-      const error = String(json.error || "保存到云端失败");
+      const error = String(
+        json.error ||
+          (res.status === 413
+            ? "云端数据过大，请删减旧求职记录中的 CV 后重试"
+            : "保存到云端失败，请稍后重试")
+      );
       setSyncStatus("error");
       setSyncError(error);
       return { ok: false as const, error };
-    } catch {
-      const error = "保存到云端失败（已写入本机缓存作备份）";
+    } catch (err) {
+      const error = formatFetchError(
+        err,
+        "保存到云端失败（已写入本机缓存作备份）"
+      );
       setSyncStatus("error");
       setSyncError(error);
       return { ok: false as const, error };

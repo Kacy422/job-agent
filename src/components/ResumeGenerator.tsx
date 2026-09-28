@@ -287,8 +287,6 @@ export function ResumeGenerator() {
       name: profile.contactName?.trim() || "WU XUELIAN, KACY",
       phone: profile.contactPhone?.trim() || "+852 65733452",
       email: profile.contactEmail?.trim() || "wuxuelian25@126.com",
-      address: profile.contactAddress?.trim() || "Hong Kong",
-      visa: profile.workVisaStatus?.trim() || "IANG Visa",
     };
   }
 

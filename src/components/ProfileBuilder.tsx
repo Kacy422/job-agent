@@ -134,16 +134,19 @@ export function ProfileBuilder() {
       if (result.ok) {
         setToast({
           type: "ok",
-          message: "个人信息已保存到云端 Redis",
+          message: "个人信息已保存到云端",
         });
       } else {
         setToast({
           type: "err",
-          message: result.error || "保存失败，请检查 Redis 配置",
+          message: result.error || "保存失败，请检查网络或 Redis 配置后重试",
         });
       }
     } catch {
-      setToast({ type: "err", message: "保存失败，请稍后重试" });
+      setToast({
+        type: "err",
+        message: "保存失败（可能超时）。本机已备份，请稍后点击 Save 重试",
+      });
     } finally {
       setSaving(false);
       setTimeout(() => setToast(null), 3200);
@@ -231,7 +234,7 @@ export function ProfileBuilder() {
             <h3 className="font-medium text-slate-900">基本信息 / Contact</h3>
           </div>
           <p className="mb-2 text-xs text-slate-500">
-            姓名、电话、邮箱、住址与签证（将出现在 CV 页眉联系方式栏）
+            姓名、电话、邮箱（将出现在 CV 页眉；不含住址/签证）
           </p>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
@@ -255,24 +258,6 @@ export function ProfileBuilder() {
               }}
               placeholder="完整电话 +852 …"
               className="soft-input"
-            />
-            <input
-              value={profile.contactAddress}
-              onChange={(e) =>
-                updateProfileField("contactAddress", e.target.value)
-              }
-              placeholder="Address（如 Hong Kong）"
-              className="soft-input"
-              aria-label="Address"
-            />
-            <input
-              value={profile.workVisaStatus}
-              onChange={(e) =>
-                updateProfileField("workVisaStatus", e.target.value)
-              }
-              placeholder="Visa / Work Authorization（如 IANG Visa）"
-              className="soft-input sm:col-span-2"
-              aria-label="Visa / Work Authorization"
             />
           </div>
           <p className="mb-2 mt-4 text-xs font-medium text-slate-600">
