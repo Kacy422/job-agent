@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   SquareKanban,
   Trash2,
@@ -14,6 +14,8 @@ import {
   Eye,
   Link2,
   ScrollText,
+  LayoutList,
+  Filter,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -25,6 +27,15 @@ import {
   type JobApplication,
   type TrackStatus,
 } from "@/types";
+import {
+  STATUS_FILTER_OPTIONS,
+  TRACK_STATUSES,
+  computeApplicationStats,
+  filterApplicationsByStatus,
+  formatApplicationUpdatedAt,
+  normalizeTrackStatus,
+  type StatusFilter,
+} from "@/lib/application-stats";
 import { CV_SHEET_CSS } from "@/lib/cv-template";
 import {
   exportHtmlPdf,
@@ -33,18 +44,18 @@ import {
   wrapCoverLetterAsDoc,
 } from "@/lib/export";
 
-const STATUSES: TrackStatus[] = [
-  "preparing",
-  "applying",
-  "applied",
-  "interview",
-];
-
 const STATUS_STYLE: Record<TrackStatus, string> = {
-  preparing: "bg-slate-100 text-slate-700 border-slate-200",
-  applying: "bg-amber-50 text-amber-800 border-amber-200",
-  applied: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  interview: "bg-violet-50 text-violet-800 border-violet-200",
+  preparing: "bg-slate-100 text-slate-700 border-slate-200/80",
+  applying: "bg-amber-50 text-amber-800 border-amber-200/80",
+  applied: "bg-emerald-50 text-emerald-800 border-emerald-200/80",
+  interview: "bg-violet-50 text-violet-800 border-violet-200/80",
+};
+
+const STATUS_DOT: Record<TrackStatus, string> = {
+  preparing: "bg-slate-400",
+  applying: "bg-amber-500",
+  applied: "bg-emerald-500",
+  interview: "bg-violet-500",
 };
 
 type PreviewKind = "cv" | "cover" | "interview" | "jd";
@@ -67,10 +78,21 @@ export function ApplicationsTracker() {
     setGenerationSourceKey,
   } = useApp();
 
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [preview, setPreview] = useState<{
     app: JobApplication;
     kind: PreviewKind;
   } | null>(null);
+
+  const { total, counts } = useMemo(
+    () => computeApplicationStats(applications),
+    [applications]
+  );
+
+  const filtered = useMemo(
+    () => filterApplicationsByStatus(applications, statusFilter),
+    [applications, statusFilter]
+  );
 
   function openInResume(id: string, regenerate = false) {
     const app = applications.find((a) => a.id === id);
@@ -90,7 +112,6 @@ export function ApplicationsTracker() {
         ? { added: [], removed: [] }
         : normalizeCvRationale(app.rationale ?? app.rationaleList)
     );
-    // 绑定指纹，避免进入专属简历时被 workspace 清空逻辑误清
     setGenerationSourceKey(
       regenerate ? null : `${url.trim()}\n${jd.trim()}`
     );
@@ -106,10 +127,7 @@ export function ApplicationsTracker() {
     } else if (kind === "cover") {
       exportHtmlPdf(wrapCoverLetterAsDoc(app.coverLetter || ""), label);
     } else {
-      exportHtmlPdf(
-        interviewQaToHtml(app.interviewQA || []),
-        label
-      );
+      exportHtmlPdf(interviewQaToHtml(app.interviewQA || []), label);
     }
   }
 
@@ -129,6 +147,7 @@ export function ApplicationsTracker() {
     }
   }
 
+  /* ——— 全局空状态 ——— */
   if (applications.length === 0) {
     return (
       <section className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -165,7 +184,7 @@ export function ApplicationsTracker() {
       <PageHeader
         emoji="📊"
         title="求职进度"
-        description={`表格视图 · 按岗位对齐材料与进度 · 共 ${applications.length} 个`}
+        description={`表格视图 · 按岗位对齐材料与进度 · 共 ${total} 个`}
         accent="indigo"
         actions={
           <button
@@ -179,154 +198,280 @@ export function ApplicationsTracker() {
         }
       />
 
-      <div className="glass-panel overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200/50 bg-slate-50/50 text-[11px] font-semibold tracking-wide text-slate-500">
-              <th className="px-4 py-3">公司 / 岗位</th>
-              <th className="px-4 py-3">初级求职材料</th>
-              <th className="px-4 py-3">网申进度</th>
-              <th className="px-4 py-3">面试备战</th>
-              <th className="px-4 py-3 text-right">快捷操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {applications.map((app) => {
-              const qaCount = app.interviewQA?.length || 0;
-              const jdFull = appJdText(app);
-              const urlFull = appJobUrl(app);
-              return (
-                <tr
-                  key={app.id}
-                  className="border-b border-slate-100 align-middle last:border-0 hover:bg-slate-50/50"
-                >
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-col items-start gap-1.5">
-                      <span className="soft-tag max-w-full border-amber-200/60 bg-amber-50/90 px-2.5 py-1 text-sm font-semibold text-amber-800 shadow-glass">
-                        <span className="truncate">
-                          {app.company || "未知公司"}
-                        </span>
-                      </span>
-                      <span className="soft-tag max-w-full border-slate-200/70 bg-slate-100/90 px-2 py-0.5 text-xs font-medium text-slate-700 shadow-glass">
-                        <span className="truncate">
-                          {app.title || "未命名岗位"}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={!jdFull && !urlFull}
-                        onClick={() => setPreview({ app, kind: "jd" })}
-                        className={`inline-flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] ${
-                          jdFull || urlFull
-                            ? "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
-                            : "cursor-not-allowed text-slate-300"
-                        }`}
-                        title="查看完整 JD 与链接"
-                      >
-                        <ScrollText className="h-3 w-3" />
-                        JD / 链接
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        disabled={!app.cvHtml}
-                        onClick={() => setPreview({ app, kind: "cv" })}
-                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs transition-all hover:scale-[1.01] ${
-                          app.cvHtml
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                            : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400"
-                        }`}
-                      >
-                        <FileText className="h-3 w-3" />
-                        CV
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!app.coverLetter}
-                        onClick={() => setPreview({ app, kind: "cover" })}
-                        className={`inline-flex items-center gap-1 rounded-xl border px-2.5 py-1 text-xs transition-all hover:scale-[1.01] ${
-                          app.coverLetter
-                            ? "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
-                            : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400"
-                        }`}
-                      >
-                        <Mail className="h-3 w-3" />
-                        CL
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <select
-                      value={app.trackStatus}
-                      onChange={(e) =>
-                        updateApplication(app.id, {
-                          trackStatus: e.target.value as TrackStatus,
-                        })
-                      }
-                      className={`rounded-xl border px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-teal-500/30 ${STATUS_STYLE[app.trackStatus]}`}
-                    >
-                      {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {TRACK_LABEL[s]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <button
-                      type="button"
-                      disabled={!qaCount}
-                      onClick={() => setPreview({ app, kind: "interview" })}
-                      className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-xs transition-all hover:scale-[1.01] ${
-                        qaCount
-                          ? "border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100"
-                          : "cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400"
-                      }`}
-                      title="查看面试问题"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      面试问题
-                      {qaCount > 0 ? ` · ${qaCount}` : ""}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3.5">
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openInResume(app.id)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        修改
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openInResume(app.id, true)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-50"
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                        重生成
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeApplication(app.id)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        删除
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* ——— Metrics Cards ——— */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <button
+          type="button"
+          onClick={() => setStatusFilter("all")}
+          className={`rounded-2xl border px-4 py-3 text-left transition ${
+            statusFilter === "all"
+              ? "border-indigo-300 bg-indigo-50/90 shadow-glass"
+              : "border-slate-200/60 bg-white/70 hover:border-slate-300"
+          }`}
+        >
+          <p className="text-[11px] font-medium tracking-wide text-slate-500">
+            总数 Total
+          </p>
+          <p className="mt-1 font-display text-2xl tabular-nums text-slate-900">
+            {total}
+          </p>
+        </button>
+        {TRACK_STATUSES.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStatusFilter(s)}
+            className={`rounded-2xl border px-4 py-3 text-left transition ${
+              statusFilter === s
+                ? "border-indigo-300 bg-indigo-50/90 shadow-glass"
+                : "border-slate-200/60 bg-white/70 hover:border-slate-300"
+            }`}
+          >
+            <p className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-slate-500">
+              <span
+                className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT[s]}`}
+              />
+              {TRACK_LABEL[s]}
+            </p>
+            <p className="mt-1 font-display text-2xl tabular-nums text-slate-900">
+              {counts[s]}
+            </p>
+          </button>
+        ))}
       </div>
 
+      {/* ——— Status Filter Tabs ——— */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+          <Filter className="h-3.5 w-3.5" />
+          状态筛选
+        </span>
+        {STATUS_FILTER_OPTIONS.map((opt) => {
+          const active = statusFilter === opt.id;
+          const count =
+            opt.id === "all" ? total : counts[opt.id as TrackStatus];
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setStatusFilter(opt.id)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                active
+                  ? "border-indigo-400 bg-indigo-600 text-white"
+                  : "border-slate-200/80 bg-white/80 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+              }`}
+            >
+              {opt.label}
+              <span
+                className={`ml-1.5 tabular-nums ${
+                  active ? "text-indigo-100" : "text-slate-400"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ——— Linear Table ——— */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-sm backdrop-blur-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50/80">
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  公司名称
+                </th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  岗位
+                </th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  当前状态
+                </th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  材料
+                </th>
+                <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  更新时间
+                </th>
+                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  操作
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-16 text-center">
+                    <LayoutList className="mx-auto h-8 w-8 text-slate-300" />
+                    <p className="mt-3 text-sm font-medium text-slate-700">
+                      当前筛选下暂无记录
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      试试切换到「全部」，或在其他状态下新增岗位
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter("all")}
+                      className="mt-4 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                    >
+                      查看全部
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((app) => {
+                  const qaCount = app.interviewQA?.length || 0;
+                  const jdFull = appJdText(app);
+                  const urlFull = appJobUrl(app);
+                  const status = normalizeTrackStatus(app.trackStatus);
+                  return (
+                    <tr
+                      key={app.id}
+                      className="border-b border-slate-100 last:border-0 transition-colors hover:bg-slate-50/80"
+                    >
+                      <td className="px-4 py-3.5 align-middle">
+                        <p className="max-w-[200px] truncate font-semibold text-slate-900">
+                          {app.company || "未知公司"}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={!jdFull && !urlFull}
+                          onClick={() => setPreview({ app, kind: "jd" })}
+                          className={`mt-1 inline-flex items-center gap-1 text-[10px] ${
+                            jdFull || urlFull
+                              ? "text-slate-400 hover:text-slate-700"
+                              : "cursor-not-allowed text-slate-300"
+                          }`}
+                          title="查看完整 JD 与链接"
+                        >
+                          <ScrollText className="h-3 w-3" />
+                          JD / 链接
+                        </button>
+                      </td>
+                      <td className="px-4 py-3.5 align-middle">
+                        <p className="max-w-[220px] truncate text-sm text-slate-700">
+                          {app.title || "未命名岗位"}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3.5 align-middle">
+                        <select
+                          value={status}
+                          onChange={(e) =>
+                            updateApplication(app.id, {
+                              trackStatus: e.target.value as TrackStatus,
+                            })
+                          }
+                          className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500/25 ${STATUS_STYLE[status]}`}
+                          aria-label="更新求职状态"
+                        >
+                          {TRACK_STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {TRACK_LABEL[s]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            disabled={!app.cvHtml}
+                            onClick={() => setPreview({ app, kind: "cv" })}
+                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition ${
+                              app.cvHtml
+                                ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
+                                : "cursor-not-allowed border-slate-100 text-slate-300"
+                            }`}
+                          >
+                            <FileText className="h-3 w-3" />
+                            CV
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!app.coverLetter}
+                            onClick={() => setPreview({ app, kind: "cover" })}
+                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition ${
+                              app.coverLetter
+                                ? "border-sky-200/80 bg-sky-50/80 text-sky-800 hover:bg-sky-100"
+                                : "cursor-not-allowed border-slate-100 text-slate-300"
+                            }`}
+                          >
+                            <Mail className="h-3 w-3" />
+                            CL
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!qaCount}
+                            onClick={() =>
+                              setPreview({ app, kind: "interview" })
+                            }
+                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition ${
+                              qaCount
+                                ? "border-violet-200/80 bg-violet-50/80 text-violet-800 hover:bg-violet-100"
+                                : "cursor-not-allowed border-slate-100 text-slate-300"
+                            }`}
+                            title="查看面试问题"
+                          >
+                            <Eye className="h-3 w-3" />
+                            面试{qaCount > 0 ? ` · ${qaCount}` : ""}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3.5 align-middle">
+                        <span className="whitespace-nowrap text-xs tabular-nums text-slate-500">
+                          {formatApplicationUpdatedAt(
+                            app.updatedAt || app.createdAt
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 align-middle">
+                        <div className="flex flex-wrap items-center justify-end gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => openInResume(app.id)}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            修改
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openInResume(app.id, true)}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-50"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            重生成
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeApplication(app.id)}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length > 0 && (
+          <div className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400">
+            显示 {filtered.length} / {total} 条记录
+            {statusFilter !== "all"
+              ? ` · 筛选：${TRACK_LABEL[statusFilter]}`
+              : ""}
+          </div>
+        )}
+      </div>
+
+      {/* ——— Preview Modal ——— */}
       {preview && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
