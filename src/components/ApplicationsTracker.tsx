@@ -367,52 +367,33 @@ export function ApplicationsTracker() {
                       <td className="px-4 py-3.5 align-middle">
                         {(() => {
                           const urgency = getDeadlineUrgency(app.deadline);
-                          if (urgency === "none") {
-                            return (
-                              <input
-                                type="date"
-                                value=""
-                                onChange={(e) =>
-                                  updateApplication(app.id, {
-                                    deadline:
-                                      normalizeDeadline(e.target.value) ||
-                                      undefined,
-                                  })
-                                }
-                                className="rounded-md border border-dashed border-slate-200 bg-transparent px-1.5 py-1 text-[11px] text-slate-400 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-500/20"
-                                aria-label="设置截止日期"
-                                title="设置截止日期"
-                              />
-                            );
-                          }
+                          const iso = normalizeDeadline(app.deadline);
+                          const dateValue = /^\d{4}-\d{2}-\d{2}$/.test(iso)
+                            ? iso
+                            : "";
                           return (
-                            <div className="flex flex-col gap-1">
-                              <span
-                                className={`inline-flex w-fit max-w-[160px] items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${deadlineUrgencyClass(urgency)}`}
-                                title={formatDeadlineLabel(app.deadline)}
-                              >
-                                {formatDeadlineLabel(app.deadline)}
-                              </span>
-                              <input
-                                type="date"
-                                value={
-                                  /^\d{4}-\d{2}-\d{2}$/.test(
-                                    normalizeDeadline(app.deadline)
-                                  )
-                                    ? normalizeDeadline(app.deadline)
-                                    : ""
-                                }
-                                onChange={(e) =>
-                                  updateApplication(app.id, {
-                                    deadline:
-                                      normalizeDeadline(e.target.value) ||
-                                      undefined,
-                                  })
-                                }
-                                className="w-[132px] rounded border border-transparent bg-transparent text-[10px] text-slate-400 outline-none hover:border-slate-200 focus:border-indigo-300"
-                                aria-label="修改截止日期"
-                              />
-                            </div>
+                            <input
+                              type="date"
+                              value={dateValue}
+                              onChange={(e) =>
+                                updateApplication(app.id, {
+                                  deadline:
+                                    normalizeDeadline(e.target.value) ||
+                                    undefined,
+                                })
+                              }
+                              className={`w-[138px] rounded-lg border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500/25 ${
+                                urgency === "none"
+                                  ? "border-dashed border-slate-200 bg-transparent text-slate-400"
+                                  : deadlineUrgencyClass(urgency)
+                              }`}
+                              aria-label="截止日期"
+                              title={
+                                urgency === "none"
+                                  ? "设置截止日期"
+                                  : formatDeadlineLabel(app.deadline)
+                              }
+                            />
                           );
                         })()}
                       </td>
