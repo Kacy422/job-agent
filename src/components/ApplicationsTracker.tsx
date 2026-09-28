@@ -16,6 +16,9 @@ import {
   ScrollText,
   LayoutList,
   Filter,
+  ArrowUpAZ,
+  ArrowDownAZ,
+  ArrowUpDown,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -34,12 +37,16 @@ import {
   normalizeDeadline,
 } from "@/lib/deadline";
 import {
+  SORT_FIELD_OPTIONS,
   STATUS_FILTER_OPTIONS,
   TRACK_STATUSES,
   computeApplicationStats,
   filterApplicationsByStatus,
   formatApplicationUpdatedAt,
   normalizeTrackStatus,
+  sortApplications,
+  type SortDir,
+  type SortField,
   type StatusFilter,
 } from "@/lib/application-stats";
 import { CV_SHEET_CSS } from "@/lib/cv-template";
@@ -64,6 +71,13 @@ const STATUS_DOT: Record<TrackStatus, string> = {
 
 type PreviewKind = "cv" | "cover" | "interview" | "jd";
 
+function sortDirHint(field: SortField, dir: SortDir): string {
+  if (field === "deadline") {
+    return dir === "asc" ? "最近截止优先" : "最远截止优先";
+  }
+  return dir === "desc" ? "最新更新优先" : "最早更新优先";
+}
+
 export function ApplicationsTracker() {
   const {
     applications,
@@ -84,6 +98,9 @@ export function ApplicationsTracker() {
   } = useApp();
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  /** 默认：最近截止优先；无截止日期的沉底 */
+  const [sortField, setSortField] = useState<SortField>("deadline");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [preview, setPreview] = useState<{
     app: JobApplication;
     kind: PreviewKind;
@@ -94,10 +111,20 @@ export function ApplicationsTracker() {
     [applications]
   );
 
-  const filtered = useMemo(
-    () => filterApplicationsByStatus(applications, statusFilter),
-    [applications, statusFilter]
-  );
+  const filtered = useMemo(() => {
+    const list = filterApplicationsByStatus(applications, statusFilter);
+    return sortApplications(list, sortField, sortDir);
+  }, [applications, statusFilter, sortField, sortDir]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortField(field);
+    // 切入字段时用该字段最常用方向
+    setSortDir(field === "deadline" ? "asc" : "desc");
+  }
 
   function openInResume(id: string, regenerate = false) {
     const app = applications.find((a) => a.id === id);
@@ -246,38 +273,90 @@ export function ApplicationsTracker() {
         ))}
       </div>
 
-      {/* ——— Status Filter Tabs ——— */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
-          <Filter className="h-3.5 w-3.5" />
-          状态筛选
-        </span>
-        {STATUS_FILTER_OPTIONS.map((opt) => {
-          const active = statusFilter === opt.id;
-          const count =
-            opt.id === "all" ? total : counts[opt.id as TrackStatus];
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              onClick={() => setStatusFilter(opt.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                active
-                  ? "border-indigo-400 bg-indigo-600 text-white"
-                  : "border-slate-200/80 bg-white/80 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {opt.label}
-              <span
-                className={`ml-1.5 tabular-nums ${
-                  active ? "text-indigo-100" : "text-slate-400"
+      {/* ——— Status Filter + Sort ——— */}
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+            <Filter className="h-3.5 w-3.5" />
+            状态筛选
+          </span>
+          {STATUS_FILTER_OPTIONS.map((opt) => {
+            const active = statusFilter === opt.id;
+            const count =
+              opt.id === "all" ? total : counts[opt.id as TrackStatus];
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setStatusFilter(opt.id)}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  active
+                    ? "border-indigo-400 bg-indigo-600 text-white"
+                    : "border-slate-200/80 bg-white/80 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                 }`}
               >
-                {count}
-              </span>
-            </button>
-          );
-        })}
+                {opt.label}
+                <span
+                  className={`ml-1.5 tabular-nums ${
+                    active ? "text-indigo-100" : "text-slate-400"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            排序
+          </span>
+          <div className="inline-flex rounded-full border border-slate-200/80 bg-white/80 p-0.5">
+            {SORT_FIELD_OPTIONS.map((opt) => {
+              const active = sortField === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggleSort(opt.id)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                    active
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-50"
+                  }`}
+                  title={
+                    active
+                      ? `当前：${sortDirHint(opt.id, sortDir)}（再点切换升降序）`
+                      : `按${opt.label}排序`
+                  }
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+            }
+            className="inline-flex items-center gap-1 rounded-full border border-slate-200/80 bg-white/80 px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            title="切换升序 / 降序"
+            aria-label="切换升降序"
+          >
+            {sortDir === "asc" ? (
+              <ArrowUpAZ className="h-3.5 w-3.5" />
+            ) : (
+              <ArrowDownAZ className="h-3.5 w-3.5" />
+            )}
+            {sortDir === "asc" ? "升序" : "降序"}
+            <span className="hidden text-slate-400 sm:inline">
+              · {sortDirHint(sortField, sortDir)}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* ——— Linear Table ——— */}
@@ -293,7 +372,25 @@ export function ApplicationsTracker() {
                   岗位
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  截止日期
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("deadline")}
+                    className={`inline-flex items-center gap-1 transition hover:text-slate-800 ${
+                      sortField === "deadline" ? "text-slate-900" : ""
+                    }`}
+                    title={sortDirHint("deadline", sortField === "deadline" ? sortDir : "asc")}
+                  >
+                    截止日期
+                    {sortField === "deadline" ? (
+                      sortDir === "asc" ? (
+                        <ArrowUpAZ className="h-3 w-3" />
+                      ) : (
+                        <ArrowDownAZ className="h-3 w-3" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-40" />
+                    )}
+                  </button>
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   当前状态
@@ -302,7 +399,25 @@ export function ApplicationsTracker() {
                   材料
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  更新时间
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("updated")}
+                    className={`inline-flex items-center gap-1 transition hover:text-slate-800 ${
+                      sortField === "updated" ? "text-slate-900" : ""
+                    }`}
+                    title={sortDirHint("updated", sortField === "updated" ? sortDir : "desc")}
+                  >
+                    更新时间
+                    {sortField === "updated" ? (
+                      sortDir === "asc" ? (
+                        <ArrowUpAZ className="h-3 w-3" />
+                      ) : (
+                        <ArrowDownAZ className="h-3 w-3" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-40" />
+                    )}
+                  </button>
                 </th>
                 <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   操作
