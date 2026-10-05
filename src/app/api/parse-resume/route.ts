@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
+import { extractPdfText } from "@/lib/extract-pdf-text";
 
 export const runtime = "nodejs";
 
@@ -41,32 +41,9 @@ function allowedExt(ext: string) {
   return TEXT_EXTS.has(ext) || EXTRACT_EXTS.has(ext) || BIND_ONLY_EXTS.has(ext);
 }
 
-/** pdf-parse v2：失败时返回空字符串，不抛给上层 */
-async function parsePdf(buffer: Buffer): Promise<string> {
-  const data = new Uint8Array(buffer);
-  let parser: {
-    getText: () => Promise<{ text?: string }>;
-    destroy: () => Promise<void>;
-  } | null = null;
-  try {
-    parser = new PDFParse({ data });
-    const result = await parser.getText();
-    return String(result?.text || "");
-  } catch (err) {
-    console.warn("[parse-resume] pdf extract skipped", err);
-    return "";
-  } finally {
-    try {
-      await parser?.destroy();
-    } catch {
-      /* ignore */
-    }
-  }
-}
-
 async function parseDocxText(buffer: Buffer): Promise<string> {
   try {
-    const result = await mammoth.extractRawText({ buffer });
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
     return String(result?.value || "");
   } catch (err) {
     console.warn("[parse-resume] docx text skipped", err);
@@ -76,7 +53,7 @@ async function parseDocxText(buffer: Buffer): Promise<string> {
 
 async function parseDocxHtml(buffer: Buffer): Promise<string> {
   try {
-    const conv = await mammoth.convertToHtml({ buffer });
+    const conv = await mammoth.convertToHtml({ buffer: Buffer.from(buffer) });
     return String(conv?.value || "").trim();
   } catch (err) {
     console.warn("[parse-resume] docx html skipped", err);
@@ -124,14 +101,15 @@ export async function POST(req: Request) {
 
     try {
       if (TEXT_EXTS.has(ext)) {
-        text = buffer.toString("utf-8");
+        text = buffer.toString("utf-8").replace(/^\uFEFF/, "");
       } else if (ext === ".pdf") {
-        text = await parsePdf(buffer);
+        text = await extractPdfText(buffer);
       } else if (ext === ".docx") {
         text = await parseDocxText(buffer);
         html = await parseDocxHtml(buffer);
       } else if (ext === ".doc") {
-        warning = "旧版 .doc 无法提取文本，文件已可绑定；建议另存为 .docx 以便改写底稿。";
+        warning =
+          "旧版 .doc 无法提取文本，文件已可绑定；建议另存为 .docx 以便改写底稿。";
       }
     } catch (err) {
       console.warn("[parse-resume] extract failed", err);
@@ -162,7 +140,6 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("[parse-resume]", err);
-    // 仍返回 200，让前端把原文件绑定上去
     return NextResponse.json({
       ok: true,
       text: "",

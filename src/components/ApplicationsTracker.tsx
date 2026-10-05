@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   SquareKanban,
   Trash2,
@@ -66,6 +67,7 @@ import {
   saveUploadedCvFile,
   wrapUploadedCvAsHtml,
 } from "@/lib/uploaded-cv";
+import { extractPdfStringsHeuristic } from "@/lib/extract-pdf-text";
 
 const STATUS_STYLE: Record<TrackStatus, string> = {
   preparing: "bg-slate-100 text-slate-700 border-slate-200/80",
@@ -78,6 +80,46 @@ const STATUS_DOT: Record<TrackStatus, string> = {
   applied: "bg-emerald-500",
   interview: "bg-violet-500",
 };
+
+function BoardLoadingSkeleton() {
+  return (
+    <section className="mx-auto max-w-[1200px] px-4 py-8 sm:px-6">
+      <div className="mb-6 h-24 animate-pulse rounded-3xl bg-slate-200/70" />
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-[88px] animate-pulse rounded-2xl bg-slate-200/60"
+          />
+        ))}
+      </div>
+      <div className="mb-3 h-8 w-64 animate-pulse rounded-full bg-slate-200/60" />
+      <div className="overflow-hidden rounded-2xl border border-slate-200/70 bg-white/80">
+        <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
+          <div className="h-3 w-full max-w-xl animate-pulse rounded bg-slate-200/80" />
+        </div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-center gap-4 border-b border-slate-50 px-4 py-4 last:border-0"
+          >
+            <div className="h-4 w-36 animate-pulse rounded bg-slate-200/70" />
+            <div className="h-4 w-48 animate-pulse rounded bg-slate-100" />
+            <div className="h-8 w-28 animate-pulse rounded-lg bg-slate-100" />
+            <div className="ml-auto h-4 w-24 animate-pulse rounded bg-slate-100" />
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-center text-xs text-slate-400">
+        {syncStatusLabel()}
+      </p>
+    </section>
+  );
+}
+
+function syncStatusLabel() {
+  return "正在从云端同步求职进度…";
+}
 
 type PreviewKind = "cv" | "cover" | "interview" | "jd";
 
@@ -139,6 +181,7 @@ export function ApplicationsTracker() {
     removeApplication,
     selectApp,
     setTab,
+    hydrated,
     setDraftJd,
     setDraftJobUrl,
     setDraftCompany,
@@ -296,6 +339,16 @@ export function ApplicationsTracker() {
             : "文本解析不完整，文件已绑定到该岗位。";
       }
 
+      if (!text && ext === ".pdf") {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          text = extractPdfStringsHeuristic(bytes);
+          if (text) warning = "";
+        } catch {
+          /* keep prior warning */
+        }
+      }
+
       const att = normalizeUploadedCv({
         filename: file.name,
         format,
@@ -360,6 +413,11 @@ export function ApplicationsTracker() {
         `${base}-面试题`
       );
     }
+  }
+
+  /* ——— 云端加载中：避免先闪「暂无记录」 ——— */
+  if (!hydrated && applications.length === 0) {
+    return <BoardLoadingSkeleton />;
   }
 
   /* ——— 全局空状态 ——— */
@@ -861,19 +919,23 @@ export function ApplicationsTracker() {
         )}
       </div>
 
-      {/* ——— Preview Modal ——— */}
-      {preview && (() => {
+      {/* ——— Preview Modal (portal to body so it centers in the viewport) ——— */}
+      {preview &&
+        typeof document !== "undefined" &&
+        createPortal(
+          (() => {
         const previewApp =
           applications.find((a) => a.id === preview.app.id) || preview.app;
         const bound = hasUploadedCv(previewApp.uploadedCv);
         return (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/45 p-4"
+          style={{ top: 0, left: 0, right: 0, bottom: 0, height: "100dvh" }}
           onClick={() => setPreview(null)}
           role="presentation"
         >
           <div
-            className="relative max-h-[90vh] w-full max-w-3xl overflow-auto rounded-3xl border border-white/60 bg-white/90 p-5 shadow-glass-lg backdrop-blur-xl"
+            className="relative max-h-[90dvh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-white/60 bg-white p-5 shadow-glass-lg"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal
@@ -1049,7 +1111,9 @@ export function ApplicationsTracker() {
           </div>
         </div>
         );
-      })()}
+          })(),
+          document.body
+        )}
     </section>
   );
 }

@@ -254,6 +254,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
 
       const local = readLocalWorkspaceCache();
+      if (local && !cancelled) {
+        applySnapshot(local, setters);
+      }
 
       try {
         const res = await fetchWithRetry(
