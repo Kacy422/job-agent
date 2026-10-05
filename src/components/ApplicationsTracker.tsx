@@ -67,7 +67,7 @@ import {
   saveUploadedCvFile,
   wrapUploadedCvAsHtml,
 } from "@/lib/uploaded-cv";
-import { extractPdfStringsHeuristic } from "@/lib/extract-pdf-text";
+import { extractPdfStringsHeuristic } from "@/lib/pdf-heuristic";
 
 const STATUS_STYLE: Record<TrackStatus, string> = {
   preparing: "bg-slate-100 text-slate-700 border-slate-200/80",
