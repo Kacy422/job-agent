@@ -37,24 +37,3 @@ const nextConfig = {
 };
 
 module.exports = nextConfig;
-
-  /**
-   * Browser → /api/agent/* → local Agent (avoids HTTPS→HTTP mixed content)
-   * e.g. /api/agent/health → http://127.0.0.1:8000/health
-   */
-  async rewrites() {
-    const base = AGENT_UPSTREAM.replace(/\/$/, "");
-    return [
-      {
-        source: "/api/agent",
-        destination: `${base}/`,
-      },
-      {
-        source: "/api/agent/:path*",
-        destination: `${base}/:path*`,
-      },
-    ];
-  },
-};
-
-module.exports = nextConfig;
