@@ -79,7 +79,7 @@ const STATUS_DOT: Record<TrackStatus, string> = {
   interview: "bg-violet-500",
 };
 
-type PreviewKind = "cv" | "cover" | "interview" | "jd" | "uploaded";
+type PreviewKind = "cv" | "cover" | "interview" | "jd";
 
 function UploadedCvViewer({ app }: { app: JobApplication }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -217,6 +217,19 @@ export function ApplicationsTracker() {
     fileInputRef.current?.click();
   }
 
+  function onMaterialsCvClick(app: JobApplication) {
+    if (uploadingId === app.id) return;
+    if (hasUploadedCv(app.uploadedCv) || app.cvHtml) {
+      setPreview({ app, kind: "cv" });
+      return;
+    }
+    startUploadCv(app.id);
+  }
+
+  function isHardUploadError(message: string) {
+    return /过大|为空|不支持|请选择/.test(message);
+  }
+
   async function handleUploadFile(file: File) {
     const appId = uploadAppIdRef.current;
     uploadAppIdRef.current = null;
@@ -224,39 +237,83 @@ export function ApplicationsTracker() {
     setUploadingId(appId);
     setUploadHint("");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/parse-resume", {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(String(data.error || "简历解析失败"));
+      if (file.size <= 0) throw new Error("文件为空");
+      if (file.size > 8 * 1024 * 1024) {
+        throw new Error("文件过大，请上传不超过 8MB 的简历");
       }
-      const att = normalizeUploadedCv({
-        filename: data.filename || file.name,
-        format: data.format,
-        mimeType: data.mimeType || file.type,
-        uploadedAt: new Date().toISOString(),
-        text: data.text,
-        html: data.html,
-        chars: data.chars,
-      });
-      if (!att) throw new Error("未能保存上传的 CV");
+      const ext = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+      if (
+        ![".pdf", ".docx", ".doc", ".txt", ".md", ".markdown"].includes(ext)
+      ) {
+        throw new Error(
+          "暂不支持该格式，请上传 .pdf / .docx / .txt / .md"
+        );
+      }
+
       try {
         await saveUploadedCvFile({
           id: appId,
-          filename: att.filename,
-          mimeType: att.mimeType || file.type || "application/octet-stream",
+          filename: file.name,
+          mimeType: file.type || "application/octet-stream",
           blob: file,
         });
       } catch {
-        /* Redis 仍保存提取文本；原文件仅本机可下载 */
+        /* 本机缓存失败不阻断绑定 */
       }
+
+      let text = "";
+      let html = "";
+      let warning = "";
+      let format = "";
+      let mimeType = file.type;
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/parse-resume", {
+          method: "POST",
+          body: form,
+        });
+        const data = (await res.json().catch(() => ({}))) as Record<
+          string,
+          unknown
+        >;
+        if (res.status === 400 && data.error) {
+          throw new Error(String(data.error));
+        }
+        text = String(data.text || "");
+        html = String(data.html || "");
+        warning = String(data.warning || "");
+        format = String(data.format || "");
+        mimeType = String(data.mimeType || file.type);
+        if (!text && !warning) {
+          warning = "未能提取文字，文件已绑定到该岗位，可预览或下载原件。";
+        }
+      } catch (e) {
+        if (e instanceof Error && isHardUploadError(e.message)) throw e;
+        warning =
+          e instanceof Error
+            ? `${e.message.replace(/^简历解析失败[:：]\s*/, "")} 文件已绑定，可预览或下载原件。`
+            : "文本解析不完整，文件已绑定到该岗位。";
+      }
+
+      const att = normalizeUploadedCv({
+        filename: file.name,
+        format,
+        mimeType,
+        uploadedAt: new Date().toISOString(),
+        text,
+        html,
+        chars: text.length,
+      });
+      if (!att) throw new Error("未能保存上传的 CV");
       updateApplication(appId, { uploadedCv: att });
-      setUploadHint(`已绑定 CV：${att.filename}`);
-      setTimeout(() => setUploadHint(""), 3500);
+      setPreview((prev) =>
+        prev && prev.app.id === appId
+          ? { ...prev, app: { ...prev.app, uploadedCv: att } }
+          : prev
+      );
+      setUploadHint(warning || `已绑定 CV：${att.filename}`);
+      setTimeout(() => setUploadHint(""), 4500);
     } catch (e) {
       setUploadHint(e instanceof Error ? e.message : "上传失败");
     } finally {
@@ -274,7 +331,9 @@ export function ApplicationsTracker() {
 
   function exportPreviewPdf() {
     if (!preview) return;
-    const { app, kind } = preview;
+    const app =
+      applications.find((a) => a.id === preview.app.id) || preview.app;
+    const { kind } = preview;
     const label = `${app.company || "export"}-${kind}`;
     if (kind === "cv") {
       exportHtmlPdf(app.cvHtml || "", label);
@@ -287,7 +346,9 @@ export function ApplicationsTracker() {
 
   function exportPreviewWord() {
     if (!preview) return;
-    const { app, kind } = preview;
+    const app =
+      applications.find((a) => a.id === preview.app.id) || preview.app;
+    const { kind } = preview;
     const base = `${app.company || "export"}-${app.title || kind}`;
     if (kind === "cv") {
       exportHtmlWord(app.cvHtml || "", `${base}-CV`);
@@ -366,9 +427,12 @@ export function ApplicationsTracker() {
       {uploadHint && (
         <p
           className={`mb-3 rounded-2xl border px-4 py-2 text-sm ${
-            /失败|不支持|未能|过大|空/.test(uploadHint)
+            isHardUploadError(uploadHint)
               ? "border-rose-100 bg-rose-50/80 text-rose-700"
-              : "border-emerald-100 bg-emerald-50/80 text-emerald-800"
+              : /未能|不完整|扫描|问题|已绑定，/.test(uploadHint) &&
+                  !/^已绑定 CV：/.test(uploadHint)
+                ? "border-amber-100 bg-amber-50/80 text-amber-900"
+                : "border-emerald-100 bg-emerald-50/80 text-emerald-800"
           }`}
         >
           {uploadHint}
@@ -676,19 +740,44 @@ export function ApplicationsTracker() {
                       </td>
                       <td className="px-4 py-3.5 align-middle">
                         <div className="flex flex-wrap gap-1.5">
-                          <button
-                            type="button"
-                            disabled={!app.cvHtml}
-                            onClick={() => setPreview({ app, kind: "cv" })}
-                            className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition ${
-                              app.cvHtml
-                                ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
-                                : "cursor-not-allowed border-slate-100 text-slate-300"
-                            }`}
-                          >
-                            <FileText className="h-3 w-3" />
-                            CV
-                          </button>
+                          {(() => {
+                            const bound = hasUploadedCv(app.uploadedCv);
+                            const generated = Boolean(app.cvHtml);
+                            const busy = uploadingId === app.id;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => onMaterialsCvClick(app)}
+                                disabled={busy}
+                                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition ${
+                                  busy
+                                    ? "border-slate-200 text-slate-400"
+                                    : bound
+                                      ? "border-amber-200/80 bg-amber-50/80 text-amber-900 hover:bg-amber-100"
+                                      : generated
+                                        ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800 hover:bg-emerald-100"
+                                        : "border-dashed border-slate-300 bg-white text-slate-600 hover:border-slate-400 hover:bg-slate-50"
+                                }`}
+                                title={
+                                  bound
+                                    ? `预览 ${app.uploadedCv?.filename || "已上传 CV"}，可在弹窗中替换`
+                                    : generated
+                                      ? "预览生成 CV，可在弹窗中上传/绑定文件"
+                                      : "上传 PDF / Word 并绑定到该岗位"
+                                }
+                              >
+                                {busy ? (
+                                  <RefreshCw className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <FileText className="h-3 w-3" />
+                                )}
+                                CV
+                                {!bound && !generated ? (
+                                  <Upload className="h-3 w-3 opacity-70" />
+                                ) : null}
+                              </button>
+                            );
+                          })()}
                           <button
                             type="button"
                             disabled={!app.coverLetter}
@@ -718,19 +807,6 @@ export function ApplicationsTracker() {
                             <Eye className="h-3 w-3" />
                             面试{qaCount > 0 ? ` · ${qaCount}` : ""}
                           </button>
-                          {hasUploadedCv(app.uploadedCv) ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPreview({ app, kind: "uploaded" })
-                              }
-                              className="inline-flex items-center gap-1 rounded-md border border-amber-200/80 bg-amber-50/80 px-2 py-1 text-[11px] text-amber-900 hover:bg-amber-100"
-                              title={app.uploadedCv?.filename || "已上传 CV"}
-                            >
-                              <Upload className="h-3 w-3" />
-                              已上传
-                            </button>
-                          ) : null}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 align-middle">
@@ -742,20 +818,6 @@ export function ApplicationsTracker() {
                       </td>
                       <td className="px-4 py-3.5 align-middle">
                         <div className="flex flex-wrap items-center justify-end gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => startUploadCv(app.id)}
-                            disabled={uploadingId === app.id}
-                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50"
-                            title="上传 PDF / Word 并绑定到该岗位"
-                          >
-                            {uploadingId === app.id ? (
-                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Upload className="h-3.5 w-3.5" />
-                            )}
-                            {hasUploadedCv(app.uploadedCv) ? "换绑 CV" : "上传 CV"}
-                          </button>
                           <button
                             type="button"
                             onClick={() => openInResume(app.id)}
@@ -800,7 +862,11 @@ export function ApplicationsTracker() {
       </div>
 
       {/* ——— Preview Modal ——— */}
-      {preview && (
+      {preview && (() => {
+        const previewApp =
+          applications.find((a) => a.id === preview.app.id) || preview.app;
+        const bound = hasUploadedCv(previewApp.uploadedCv);
+        return (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
           onClick={() => setPreview(null)}
@@ -816,31 +882,66 @@ export function ApplicationsTracker() {
               <div>
                 <h3 className="font-display text-lg text-slate-900">
                   {preview.kind === "cv"
-                    ? "CV 预览"
-                    : preview.kind === "uploaded"
-                      ? "已上传 CV"
-                      : preview.kind === "cover"
-                        ? "Cover Letter 预览"
-                        : preview.kind === "jd"
-                          ? "岗位 JD / 链接"
-                          : "面试问题"}
+                    ? bound
+                      ? "CV"
+                      : "CV 预览"
+                    : preview.kind === "cover"
+                      ? "Cover Letter 预览"
+                      : preview.kind === "jd"
+                        ? "岗位 JD / 链接"
+                        : "面试问题"}
                 </h3>
                 <p className="text-xs tracking-wide text-slate-500">
-                  {preview.app.company} · {preview.app.title}
+                  {previewApp.company} · {previewApp.title}
+                  {preview.kind === "cv" && bound
+                    ? ` · ${previewApp.uploadedCv?.filename}`
+                    : ""}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {preview.kind === "uploaded" && (
-                  <button
-                    type="button"
-                    onClick={() => void handleDownloadUploaded(preview.app)}
-                    className="soft-btn rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-950 shadow-glass"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    下载
-                  </button>
+                {preview.kind === "cv" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => startUploadCv(previewApp.id)}
+                      className="soft-btn rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-950 shadow-glass"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      {bound ? "替换文件" : "上传文件"}
+                    </button>
+                    {bound && (
+                      <button
+                        type="button"
+                        onClick={() => void handleDownloadUploaded(previewApp)}
+                        className="soft-btn rounded-xl border border-slate-200/60 bg-white/80 px-3 py-1.5 text-xs text-slate-800 shadow-glass"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        下载
+                      </button>
+                    )}
+                    {previewApp.cvHtml ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={exportPreviewPdf}
+                          className="soft-btn rounded-xl border border-slate-200/60 bg-white/80 px-3 py-1.5 text-xs text-slate-800 shadow-glass"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          导出 PDF
+                        </button>
+                        <button
+                          type="button"
+                          onClick={exportPreviewWord}
+                          className="soft-btn rounded-xl border border-indigo-200/60 bg-indigo-50/80 px-3 py-1.5 text-xs text-indigo-900 shadow-glass"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          导出 Word
+                        </button>
+                      </>
+                    ) : null}
+                  </>
                 )}
-                {preview.kind !== "jd" && preview.kind !== "uploaded" && (
+                {preview.kind !== "jd" && preview.kind !== "cv" && (
                   <>
                     <button
                       type="button"
@@ -872,66 +973,83 @@ export function ApplicationsTracker() {
 
             {preview.kind === "jd" && (
               <div className="space-y-3">
-                {appJobUrl(preview.app) ? (
+                {appJobUrl(previewApp) ? (
                   <a
-                    href={appJobUrl(preview.app)}
+                    href={appJobUrl(previewApp)}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex max-w-full items-center gap-1.5 break-all text-sm text-teal-700 underline"
                   >
                     <Link2 className="h-3.5 w-3.5 shrink-0" />
-                    {appJobUrl(preview.app)}
+                    {appJobUrl(previewApp)}
                   </a>
                 ) : (
                   <p className="text-xs text-slate-400">未保存岗位链接</p>
                 )}
                 <pre className="max-h-[60vh] overflow-y-auto whitespace-pre-wrap rounded-2xl border border-slate-200/40 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-800">
-                  {appJdText(preview.app) || "（暂无 JD 文本）"}
+                  {appJdText(previewApp) || "（暂无 JD 文本）"}
                 </pre>
               </div>
             )}
             {preview.kind === "cv" && (
-              <>
-                <style dangerouslySetInnerHTML={{ __html: CV_SHEET_CSS }} />
-                <div
-                  className="origin-top scale-[0.72] sm:scale-90"
-                  dangerouslySetInnerHTML={{
-                    __html: preview.app.cvHtml || "",
-                  }}
-                />
-              </>
-            )}
-            {preview.kind === "uploaded" && (
-              <UploadedCvViewer app={preview.app} />
+              <div className="space-y-6">
+                {bound && (
+                  <div>
+                    <p className="mb-2 text-[11px] font-medium text-slate-500">
+                      已绑定文件
+                    </p>
+                    <UploadedCvViewer app={previewApp} />
+                  </div>
+                )}
+                {previewApp.cvHtml ? (
+                  <div>
+                    {bound ? (
+                      <p className="mb-2 text-[11px] font-medium text-slate-500">
+                        生成稿
+                      </p>
+                    ) : null}
+                    <style dangerouslySetInnerHTML={{ __html: CV_SHEET_CSS }} />
+                    <div
+                      className="origin-top scale-[0.72] sm:scale-90"
+                      dangerouslySetInnerHTML={{
+                        __html: previewApp.cvHtml || "",
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
             )}
             {preview.kind === "cover" && (
               <pre className="whitespace-pre-wrap rounded-2xl border border-slate-200/40 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-800">
-                {preview.app.coverLetter}
+                {previewApp.coverLetter}
               </pre>
             )}
             {preview.kind === "interview" && (
               <ul className="space-y-3">
-                {(preview.app.interviewQA || []).map((qa, i) => (
+                {(previewApp.interviewQA || []).map((qa, i) => (
                   <li
                     key={i}
                     className="rounded-2xl border border-violet-100/80 bg-violet-50/40 p-4 text-sm"
                   >
-                    <p className="font-semibold text-slate-900">
-                      Q{i + 1}. {qa.question}
+                    <p className="font-medium text-slate-900">
+                      {i + 1}. {qa.question}
                     </p>
-                    {qa.tip && (
-                      <p className="mt-1 text-xs text-amber-800">💡 {qa.tip}</p>
-                    )}
                     <p className="mt-2 whitespace-pre-wrap text-slate-700">
                       {qa.answer}
                     </p>
+                    {qa.tip ? (
+                      <p className="mt-2 text-xs text-violet-700">
+                        Tip: {qa.tip}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
     </section>
   );
 }

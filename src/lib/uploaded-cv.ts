@@ -1,7 +1,7 @@
 import type { UploadedCvAttachment } from "@/types";
 
 export const UPLOADED_CV_ACCEPT =
-  ".pdf,.docx,.txt,.md,.markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown";
+  ".pdf,.docx,.doc,.txt,.md,.markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain,text/markdown";
 
 const TEXT_MAX = 24_000;
 const HTML_MAX = 32_000;
@@ -50,7 +50,9 @@ export function wrapUploadedCvAsHtml(
   const inner = String(att.html || "").trim();
   const body = inner
     ? inner
-    : `<pre class="cv-uploaded-pre">${escapeHtml(att.text || "")}</pre>`;
+    : att.text?.trim()
+      ? `<pre class="cv-uploaded-pre">${escapeHtml(att.text)}</pre>`
+      : `<p class="cv-uploaded-empty">已绑定文件。文本未能提取，请下载原件查看。</p>`;
   const name = escapeHtml(att.filename || "Uploaded CV");
   return `<div class="cv-sheet cv-uploaded-sheet"><p class="cv-uploaded-meta">Uploaded CV · ${name}</p><div class="cv-uploaded-body">${body}</div></div>`;
 }
@@ -142,7 +144,19 @@ export async function downloadUploadedCv(appId: string, att?: UploadedCvAttachme
     return;
   }
   const text = att?.text || "";
-  if (!text) throw new Error("本机未找到原文件，且没有可下载的提取文本");
-  const base = (att?.filename || "cv").replace(/\.[^.]+$/, "");
-  downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), `${base}.txt`);
+  const html = att?.html || "";
+  if (text) {
+    const base = (att?.filename || "cv").replace(/\.[^.]+$/, "");
+    downloadBlob(new Blob([text], { type: "text/plain;charset=utf-8" }), `${base}.txt`);
+    return;
+  }
+  if (html) {
+    const base = (att?.filename || "cv").replace(/\.[^.]+$/, "");
+    downloadBlob(
+      new Blob([html], { type: "text/html;charset=utf-8" }),
+      `${base}.html`
+    );
+    return;
+  }
+  throw new Error("本机未找到原文件，且没有可下载的提取内容");
 }
