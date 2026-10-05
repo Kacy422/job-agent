@@ -85,6 +85,20 @@ export function formatRationaleLine(item: CvRationaleItem): string {
   return item.text;
 }
 
+/** Parsed + metadata for a CV file uploaded onto a job application */
+export interface UploadedCvAttachment {
+  filename: string;
+  /** pdf | docx | txt | md | markdown */
+  format: string;
+  mimeType?: string;
+  uploadedAt: string;
+  /** Extracted plain text for AI */
+  text: string;
+  /** Preview / base-draft HTML (not necessarily cv-sheet) */
+  html?: string;
+  chars?: number;
+}
+
 export interface JobApplication {
   id: string;
   company: string;
@@ -99,6 +113,8 @@ export interface JobApplication {
   jobUrl?: string;
   /** Application deadline — prefer YYYY-MM-DD */
   deadline?: string;
+  /** User-uploaded source CV bound to this application */
+  uploadedCv?: UploadedCvAttachment;
   cvHtml?: string;
   coverLetter?: string;
   rationale?: CvRationale;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   SquareKanban,
   Trash2,
@@ -19,6 +19,7 @@ import {
   ArrowUpAZ,
   ArrowDownAZ,
   ArrowUpDown,
+  Upload,
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -56,6 +57,15 @@ import {
   interviewQaToHtml,
   wrapCoverLetterAsDoc,
 } from "@/lib/export";
+import {
+  UPLOADED_CV_ACCEPT,
+  downloadUploadedCv,
+  getUploadedCvFile,
+  hasUploadedCv,
+  normalizeUploadedCv,
+  saveUploadedCvFile,
+  wrapUploadedCvAsHtml,
+} from "@/lib/uploaded-cv";
 
 const STATUS_STYLE: Record<TrackStatus, string> = {
   preparing: "bg-slate-100 text-slate-700 border-slate-200/80",
@@ -69,7 +79,51 @@ const STATUS_DOT: Record<TrackStatus, string> = {
   interview: "bg-violet-500",
 };
 
-type PreviewKind = "cv" | "cover" | "interview" | "jd";
+type PreviewKind = "cv" | "cover" | "interview" | "jd" | "uploaded";
+
+function UploadedCvViewer({ app }: { app: JobApplication }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [mime, setMime] = useState("");
+
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    void (async () => {
+      const rec = await getUploadedCvFile(app.id);
+      if (cancelled || !rec?.blob) return;
+      url = URL.createObjectURL(rec.blob);
+      setBlobUrl(url);
+      setMime(rec.mimeType || app.uploadedCv?.mimeType || "");
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [app.id, app.uploadedCv?.mimeType]);
+
+  if (blobUrl && /pdf/i.test(mime)) {
+    return (
+      <iframe
+        title="上传 CV 预览"
+        src={blobUrl}
+        className="h-[70vh] w-full rounded-xl border border-slate-200 bg-white"
+      />
+    );
+  }
+
+  const html = wrapUploadedCvAsHtml(app.uploadedCv);
+  if (html) {
+    return (
+      <div
+        className="max-h-[70vh] overflow-auto rounded-xl border border-slate-200/60 bg-white p-4 text-sm leading-relaxed text-slate-800 [&_p]:mb-2"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    );
+  }
+  return (
+    <p className="text-sm text-slate-500">暂无已上传 CV 内容可预览。</p>
+  );
+}
 
 function sortDirHint(field: SortField, dir: SortDir): string {
   if (field === "deadline") {
@@ -101,6 +155,10 @@ export function ApplicationsTracker() {
   /** 默认：最近截止优先；无截止日期的沉底 */
   const [sortField, setSortField] = useState<SortField>("deadline");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAppIdRef = useRef<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadHint, setUploadHint] = useState("");
   const [preview, setPreview] = useState<{
     app: JobApplication;
     kind: PreviewKind;
@@ -137,7 +195,10 @@ export function ApplicationsTracker() {
     setDraftCompany(app.company || "");
     setDraftTitle(app.title || "");
     setDraftDeadline(normalizeDeadline(app.deadline) || "");
-    setTailoredResume(regenerate ? "" : app.cvHtml || "");
+    const uploadedHtml = wrapUploadedCvAsHtml(app.uploadedCv);
+    setTailoredResume(
+      regenerate ? uploadedHtml : app.cvHtml || uploadedHtml || ""
+    );
     setCoverLetter(regenerate ? "" : app.coverLetter || "");
     setInterviewQA(regenerate ? [] : app.interviewQA || []);
     setRationale(
@@ -149,6 +210,66 @@ export function ApplicationsTracker() {
       regenerate ? null : `${url.trim()}\n${jd.trim()}`
     );
     setTab("resume");
+  }
+
+  function startUploadCv(id: string) {
+    uploadAppIdRef.current = id;
+    fileInputRef.current?.click();
+  }
+
+  async function handleUploadFile(file: File) {
+    const appId = uploadAppIdRef.current;
+    uploadAppIdRef.current = null;
+    if (!appId) return;
+    setUploadingId(appId);
+    setUploadHint("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/parse-resume", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(data.error || "简历解析失败"));
+      }
+      const att = normalizeUploadedCv({
+        filename: data.filename || file.name,
+        format: data.format,
+        mimeType: data.mimeType || file.type,
+        uploadedAt: new Date().toISOString(),
+        text: data.text,
+        html: data.html,
+        chars: data.chars,
+      });
+      if (!att) throw new Error("未能保存上传的 CV");
+      try {
+        await saveUploadedCvFile({
+          id: appId,
+          filename: att.filename,
+          mimeType: att.mimeType || file.type || "application/octet-stream",
+          blob: file,
+        });
+      } catch {
+        /* Redis 仍保存提取文本；原文件仅本机可下载 */
+      }
+      updateApplication(appId, { uploadedCv: att });
+      setUploadHint(`已绑定 CV：${att.filename}`);
+      setTimeout(() => setUploadHint(""), 3500);
+    } catch (e) {
+      setUploadHint(e instanceof Error ? e.message : "上传失败");
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function handleDownloadUploaded(app: JobApplication) {
+    try {
+      await downloadUploadedCv(app.id, app.uploadedCv);
+    } catch (e) {
+      setUploadHint(e instanceof Error ? e.message : "下载失败");
+    }
   }
 
   function exportPreviewPdf() {
@@ -230,6 +351,29 @@ export function ApplicationsTracker() {
           </button>
         }
       />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={UPLOADED_CV_ACCEPT}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) void handleUploadFile(file);
+        }}
+      />
+      {uploadHint && (
+        <p
+          className={`mb-3 rounded-2xl border px-4 py-2 text-sm ${
+            /失败|不支持|未能|过大|空/.test(uploadHint)
+              ? "border-rose-100 bg-rose-50/80 text-rose-700"
+              : "border-emerald-100 bg-emerald-50/80 text-emerald-800"
+          }`}
+        >
+          {uploadHint}
+        </p>
+      )}
 
       {/* ——— Metrics Cards ——— */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -574,6 +718,19 @@ export function ApplicationsTracker() {
                             <Eye className="h-3 w-3" />
                             面试{qaCount > 0 ? ` · ${qaCount}` : ""}
                           </button>
+                          {hasUploadedCv(app.uploadedCv) ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setPreview({ app, kind: "uploaded" })
+                              }
+                              className="inline-flex items-center gap-1 rounded-md border border-amber-200/80 bg-amber-50/80 px-2 py-1 text-[11px] text-amber-900 hover:bg-amber-100"
+                              title={app.uploadedCv?.filename || "已上传 CV"}
+                            >
+                              <Upload className="h-3 w-3" />
+                              已上传
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-4 py-3.5 align-middle">
@@ -585,6 +742,20 @@ export function ApplicationsTracker() {
                       </td>
                       <td className="px-4 py-3.5 align-middle">
                         <div className="flex flex-wrap items-center justify-end gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => startUploadCv(app.id)}
+                            disabled={uploadingId === app.id}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-50 disabled:opacity-50"
+                            title="上传 PDF / Word 并绑定到该岗位"
+                          >
+                            {uploadingId === app.id ? (
+                              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Upload className="h-3.5 w-3.5" />
+                            )}
+                            {hasUploadedCv(app.uploadedCv) ? "换绑 CV" : "上传 CV"}
+                          </button>
                           <button
                             type="button"
                             onClick={() => openInResume(app.id)}
@@ -646,18 +817,30 @@ export function ApplicationsTracker() {
                 <h3 className="font-display text-lg text-slate-900">
                   {preview.kind === "cv"
                     ? "CV 预览"
-                    : preview.kind === "cover"
-                      ? "Cover Letter 预览"
-                      : preview.kind === "jd"
-                        ? "岗位 JD / 链接"
-                        : "面试问题"}
+                    : preview.kind === "uploaded"
+                      ? "已上传 CV"
+                      : preview.kind === "cover"
+                        ? "Cover Letter 预览"
+                        : preview.kind === "jd"
+                          ? "岗位 JD / 链接"
+                          : "面试问题"}
                 </h3>
                 <p className="text-xs tracking-wide text-slate-500">
                   {preview.app.company} · {preview.app.title}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {preview.kind !== "jd" && (
+                {preview.kind === "uploaded" && (
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadUploaded(preview.app)}
+                    className="soft-btn rounded-xl border border-amber-200/60 bg-amber-50/80 px-3 py-1.5 text-xs text-amber-950 shadow-glass"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    下载
+                  </button>
+                )}
+                {preview.kind !== "jd" && preview.kind !== "uploaded" && (
                   <>
                     <button
                       type="button"
@@ -717,6 +900,9 @@ export function ApplicationsTracker() {
                   }}
                 />
               </>
+            )}
+            {preview.kind === "uploaded" && (
+              <UploadedCvViewer app={preview.app} />
             )}
             {preview.kind === "cover" && (
               <pre className="whitespace-pre-wrap rounded-2xl border border-slate-200/40 bg-slate-50/80 p-4 text-sm leading-relaxed text-slate-800">

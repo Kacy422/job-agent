@@ -544,6 +544,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
               app.deadline !== undefined
                 ? app.deadline
                 : existing.deadline,
+            uploadedCv:
+              app.uploadedCv !== undefined
+                ? app.uploadedCv
+                : existing.uploadedCv,
             cvHtml: app.cvHtml !== undefined ? app.cvHtml : existing.cvHtml,
             coverLetter:
               app.coverLetter !== undefined
@@ -613,6 +617,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const removeApplication = useCallback((id: string) => {
     setApplications((prev) => prev.filter((a) => a.id !== id));
     setSelectedAppId((cur) => (cur === id ? null : cur));
+    void import("@/lib/uploaded-cv").then((m) => m.deleteUploadedCvFile(id));
   }, []);
 
   const selectedApp = useMemo(

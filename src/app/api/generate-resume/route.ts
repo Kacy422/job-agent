@@ -57,9 +57,15 @@ export async function POST(req: Request) {
       Number(body.revisionRound) || (currentCvHtml && revisionNotes ? 2 : 1)
     );
 
-    if (!jd || !resume) {
+    const uploadedCvText = String(body.uploadedCvText || "").trim();
+    const resumeParts = [resume, uploadedCvText ? `【岗位已上传 CV】\n${uploadedCvText}` : ""]
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const resumeForModel = resumeParts.join("\n\n");
+
+    if (!jd || !resumeForModel) {
       return NextResponse.json(
-        { error: "请提供目标 JD 与全量经历库内容" },
+        { error: "请提供目标 JD，以及人物画像或已上传 CV" },
         { status: 400 }
       );
     }
@@ -177,7 +183,7 @@ ${coursePoolPromptBlock()}
 ${jd.slice(0, 5500)}
 
 【Full Experience Library / Profile Data】
-${resume.slice(0, 8000)}
+${resumeForModel.slice(0, 10000)}
 
 【Current Tailored CV HTML — BASELINE】
 ${currentCvHtml.slice(0, 14000)}
@@ -195,7 +201,7 @@ ${revisionNotes.slice(0, 2500)}
 ${jd.slice(0, 5500)}
 
 【Full Experience Library / Profile Data — fact check】
-${resume.slice(0, 8000)}
+${resumeForModel.slice(0, 10000)}
 
 【Base CV HTML — START FROM THIS】
 ${baseCvHtml.slice(0, 14000)}`
@@ -208,7 +214,7 @@ ${baseCvHtml.slice(0, 14000)}`
 ${jd.slice(0, 5500)}
 
 【Full Experience Library / Profile Data】
-${resume.slice(0, 10000)}`,
+${resumeForModel.slice(0, 12000)}`,
           },
         ],
         {

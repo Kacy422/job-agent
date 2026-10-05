@@ -54,6 +54,7 @@ import {
   extractDeadlineFromText,
   normalizeDeadline,
 } from "@/lib/deadline";
+import { hasUploadedCv, wrapUploadedCvAsHtml } from "@/lib/uploaded-cv";
 import {
   EMPTY_CV_RATIONALE,
   isCvRationaleEmpty,
@@ -79,6 +80,8 @@ export function ResumeGenerator() {
     fullExperience,
     profile,
     applications,
+    selectedAppId,
+    selectedApp,
     draftJd,
     setDraftJd,
     draftJobUrl,
@@ -165,7 +168,11 @@ export function ResumeGenerator() {
 
   const savedBaseCvs = useMemo(() => {
     return applications
-      .filter((a) => Boolean(a.cvHtml && a.cvHtml.includes("cv-sheet")))
+      .filter(
+        (a) =>
+          Boolean(a.cvHtml && a.cvHtml.includes("cv-sheet")) ||
+          hasUploadedCv(a.uploadedCv)
+      )
       .slice()
       .sort(
         (a, b) =>
@@ -180,6 +187,16 @@ export function ResumeGenerator() {
     }
   }, [baseCvId, savedBaseCvs]);
 
+  useEffect(() => {
+    if (!selectedAppId || !selectedApp) return;
+    if (
+      hasUploadedCv(selectedApp.uploadedCv) ||
+      selectedApp.cvHtml?.includes("cv-sheet")
+    ) {
+      setBaseCvId(selectedAppId);
+    }
+  }, [selectedAppId, selectedApp?.uploadedCv?.uploadedAt, selectedApp?.cvHtml]);
+
   function formatBaseCvLabel(app: (typeof applications)[number]) {
     const d = new Date(app.updatedAt || app.createdAt);
     const dateStr = Number.isNaN(d.getTime())
@@ -187,15 +204,33 @@ export function ResumeGenerator() {
       : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const company = app.company?.trim() || "未命名公司";
     const title = app.title?.trim() || "未命名岗位";
+    const uploaded = hasUploadedCv(app.uploadedCv) ? " · 已上传" : "";
     return dateStr
-      ? `[${dateStr}] ${company} - ${title} CV`
-      : `${company} - ${title} CV`;
+      ? `[${dateStr}] ${company} - ${title} CV${uploaded}`
+      : `${company} - ${title} CV${uploaded}`;
+  }
+
+  function resolveUploadedAttachment() {
+    const fromBase = applications.find((a) => a.id === baseCvId)?.uploadedCv;
+    if (hasUploadedCv(fromBase)) return fromBase;
+    if (hasUploadedCv(selectedApp?.uploadedCv)) return selectedApp?.uploadedCv;
+    return undefined;
+  }
+
+  function resolveResumeSource() {
+    const uploaded = resolveUploadedAttachment();
+    return [fullExperience.trim(), uploaded?.text?.trim()]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   function resolveBaseCvHtml(): string | undefined {
     if (!baseCvId) return undefined;
     const app = applications.find((a) => a.id === baseCvId);
-    const html = app?.cvHtml?.trim();
+    if (!app) return undefined;
+    const uploadedHtml = wrapUploadedCvAsHtml(app.uploadedCv);
+    if (uploadedHtml) return uploadedHtml;
+    const html = app.cvHtml?.trim();
     if (!html || !html.includes("cv-sheet")) return undefined;
     return stripReviewMarks(html);
   }
@@ -306,7 +341,7 @@ export function ResumeGenerator() {
   }
 
   const jdOrUrl = draftJd.trim() || draftJobUrl.trim() || cachedParsedJd.trim();
-  const canRewrite = Boolean(fullExperience.trim() && jdOrUrl);
+  const canRewrite = Boolean(resolveResumeSource() && jdOrUrl);
   const canParseUrl = Boolean(draftJobUrl.trim());
   const canRecognizeMeta = Boolean(
     draftJd.trim() && !looksLikeUrl(draftJd.trim())
@@ -718,8 +753,8 @@ export function ResumeGenerator() {
   }
 
   async function rewriteCv() {
-    if (!fullExperience.trim()) {
-      setError("请先在「人物画像」填写结构化经历");
+    if (!resolveResumeSource()) {
+      setError("请先在「人物画像」填写经历，或在求职进度为该岗位上传 CV");
       return;
     }
     if (!jdOrUrl) {
@@ -736,11 +771,13 @@ export function ResumeGenerator() {
     setRefineStatus("");
     try {
       const resolved = await resolveJd();
+      const uploaded = resolveUploadedAttachment();
       const data = await fetchGenerateResume(
         {
           jd: resolved.jd,
-          resume: fullExperience,
+          resume: resolveResumeSource(),
           revisionRound: 1,
+          ...(uploaded?.text ? { uploadedCvText: uploaded.text } : {}),
           ...(baseHtml ? { baseCvHtml: baseHtml } : {}),
         },
         { retries: 1 }
@@ -764,8 +801,8 @@ export function ResumeGenerator() {
       setError("请填写手动修改需求，例如：强调 GIS 数据分析经验");
       return;
     }
-    if (!fullExperience.trim()) {
-      setError("请先在「人物画像」填写结构化经历");
+    if (!resolveResumeSource()) {
+      setError("请先在「人物画像」填写经历，或为该岗位上传 CV");
       return;
     }
 
@@ -787,13 +824,15 @@ export function ResumeGenerator() {
         throw new Error("无法读取上一版 CV，请先重新生成初稿");
       }
 
+      const uploaded = resolveUploadedAttachment();
       const data = await fetchGenerateResume(
         {
           jd: resolved.jd,
-          resume: fullExperience,
+          resume: resolveResumeSource(),
           currentCvHtml: current,
           revisionNotes: revisionNotes.trim(),
           revisionRound: nextRound,
+          ...(uploaded?.text ? { uploadedCvText: uploaded.text } : {}),
         },
         { signal: controller.signal, retries: 1 }
       );
@@ -821,7 +860,7 @@ export function ResumeGenerator() {
 
   async function genCover() {
     if (!canRewrite) {
-      setError("需要岗位 JD（或网址）与人物画像全量经历");
+      setError("需要岗位 JD（或网址），以及人物画像或已上传 CV");
       return;
     }
     setLoadingCover(true);
@@ -834,7 +873,7 @@ export function ResumeGenerator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jd: resolved.jd,
-          resume: fullExperience,
+          resume: resolveResumeSource(),
           company: draftCompany || resolved.company || "the company",
           jobTitle: draftTitle || resolved.title || "the role",
           revisionRound: 1,
@@ -866,8 +905,8 @@ export function ResumeGenerator() {
       setError("请填写 Cover Letter 修改建议");
       return;
     }
-    if (!fullExperience.trim()) {
-      setError("请先在「人物画像」填写结构化经历");
+    if (!resolveResumeSource()) {
+      setError("请先在「人物画像」填写经历，或为该岗位上传 CV");
       return;
     }
     const nextRound = Math.max(2, coverRevisionRound + 1);
@@ -881,7 +920,7 @@ export function ResumeGenerator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jd: resolved.jd,
-          resume: fullExperience,
+          resume: resolveResumeSource(),
           company: draftCompany || resolved.company || "the company",
           jobTitle: draftTitle || resolved.title || "the role",
           currentCoverLetter: normalizeCoverLetterText(coverLetter),
@@ -912,7 +951,7 @@ export function ResumeGenerator() {
 
   async function genInterview() {
     if (!canRewrite) {
-      setError("需要岗位 JD（或网址）与人物画像全量经历");
+      setError("需要岗位 JD（或网址），以及人物画像或已上传 CV");
       return;
     }
     setLoadingInterview(true);
@@ -924,7 +963,7 @@ export function ResumeGenerator() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jd: resolved.jd,
-          resume: fullExperience,
+          resume: resolveResumeSource(),
           jobTitle: draftTitle || resolved.title || "the role",
         }),
       });
@@ -1148,7 +1187,7 @@ export function ResumeGenerator() {
         }
       />
 
-      {!fullExperience.trim() && (
+      {!fullExperience.trim() && !hasUploadedCv(resolveUploadedAttachment()) && (
         <p className="mb-4 rounded-2xl border border-amber-200/50 bg-amber-50/70 px-4 py-3 text-sm text-amber-900 shadow-glass backdrop-blur-md">
           人物画像为空。
           <button
@@ -1158,6 +1197,7 @@ export function ResumeGenerator() {
           >
             前往填写
           </button>
+          ，或在求职进度为岗位上传 CV。
         </p>
       )}
       {error && (
@@ -1196,12 +1236,23 @@ export function ResumeGenerator() {
                   </option>
                 ))}
               </select>
+              {hasUploadedCv(resolveUploadedAttachment()) && (
+                <p className="mt-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] leading-relaxed text-amber-900">
+                  已加载该岗位上传的 CV
+                  {resolveUploadedAttachment()?.filename
+                    ? `：${resolveUploadedAttachment()?.filename}`
+                    : ""}
+                  ，将作为改写 / Cover Letter / 面试题底稿。
+                </p>
+              )}
               <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400">
                 {baseCvId
-                  ? "将以所选历史 CV 为底稿，按新 JD 做针对性微调（保留优质结构与核心经历）"
-                  : "从人物画像全量履历匹配生成；保存到求职进度的 CV 会出现在上方列表"}
+                  ? hasUploadedCv(resolveUploadedAttachment())
+                    ? "以该岗位已上传 CV 为底稿，按当前 JD 定向微调"
+                    : "将以所选历史 CV 为底稿，按新 JD 做针对性微调（保留优质结构与核心经历）"
+                  : "从人物画像全量履历匹配生成；看板「上传 CV」或「保存 CV」会出现在上方列表"}
                 {savedBaseCvs.length === 0
-                  ? " · 暂无历史简历，请先生成并「保存 CV 到求职进度」"
+                  ? " · 暂无底稿：可在求职进度上传 PDF/Word，或生成后保存"
                   : ""}
               </p>
             </div>

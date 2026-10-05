@@ -10,6 +10,7 @@ import {
 } from "@/types";
 import { migrateToProfile } from "@/lib/experience";
 import { normalizeDeadline } from "@/lib/deadline";
+import { normalizeUploadedCv } from "@/lib/uploaded-cv";
 
 /** Serializable blob stored in Redis + localStorage cache */
 export interface WorkspaceSnapshot {
@@ -95,6 +96,7 @@ export function normalizeWorkspaceSnapshot(raw: unknown): WorkspaceSnapshot {
         applyUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
         jobUrl: String(a.jobUrl || a.applyUrl || "") || undefined,
         deadline: normalizeDeadline(a.deadline) || undefined,
+        uploadedCv: normalizeUploadedCv(a.uploadedCv),
         // 旧「网申中」(applying) → 「准备中」(preparing)
         trackStatus: (() => {
           const raw = String(a.trackStatus || "");

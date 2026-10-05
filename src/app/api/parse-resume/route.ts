@@ -21,6 +21,13 @@ function normalizeText(text: string) {
     .trim();
 }
 
+function escapeHtml(s: string) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 /** pdf-parse v2：命名导出 PDFParse 类 */
 async function parsePdf(buffer: Buffer): Promise<string> {
   // Buffer 会被库内部转为 Uint8Array；复制一份避免 Transferable 清空原 buffer
@@ -65,7 +72,8 @@ export async function POST(req: Request) {
     if (![...TEXT_EXTS, ...BINARY_EXTS].includes(ext)) {
       return NextResponse.json(
         {
-          error: "暂不支持该格式，请上传 .txt / .md / .markdown / .pdf / .docx",
+          error:
+            "暂不支持该格式，请上传 .pdf / .docx / .txt / .md（旧版 .doc 请另存为 .docx）",
         },
         { status: 400 }
       );
@@ -73,6 +81,7 @@ export async function POST(req: Request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     let text = "";
+    let html = "";
 
     if (TEXT_EXTS.has(ext)) {
       text = buffer.toString("utf-8");
@@ -80,9 +89,21 @@ export async function POST(req: Request) {
       text = await parsePdf(buffer);
     } else if (ext === ".docx") {
       text = await parseDocx(buffer);
+      try {
+        const conv = await mammoth.convertToHtml({ buffer });
+        html = String(conv?.value || "").trim();
+      } catch {
+        html = "";
+      }
     }
 
     text = normalizeText(text);
+    if (!html && text) {
+      html = text
+        .split(/\n{2,}/)
+        .map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br/>")}</p>`)
+        .join("");
+    }
     if (!text) {
       return NextResponse.json(
         {
@@ -95,8 +116,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       text,
+      html,
       filename: file.name,
       format: ext.replace(".", ""),
+      mimeType: file.type || "",
       chars: text.length,
     });
   } catch (err) {
