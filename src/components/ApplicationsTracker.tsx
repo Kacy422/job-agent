@@ -72,12 +72,16 @@ import { extractPdfStringsHeuristic } from "@/lib/pdf-heuristic";
 const STATUS_STYLE: Record<TrackStatus, string> = {
   preparing: "bg-slate-100 text-slate-700 border-slate-200/80",
   applied: "bg-emerald-50 text-emerald-800 border-emerald-200/80",
+  testReceived: "bg-amber-50 text-amber-900 border-amber-200/80",
+  testCompleted: "bg-orange-50 text-orange-900 border-orange-200/80",
   interview: "bg-violet-50 text-violet-800 border-violet-200/80",
 };
 
 const STATUS_DOT: Record<TrackStatus, string> = {
   preparing: "bg-slate-400",
   applied: "bg-emerald-500",
+  testReceived: "bg-amber-500",
+  testCompleted: "bg-orange-500",
   interview: "bg-violet-500",
 };
 
@@ -171,6 +175,9 @@ function sortDirHint(field: SortField, dir: SortDir): string {
   if (field === "deadline") {
     return dir === "asc" ? "最近截止优先" : "最远截止优先";
   }
+  if (field === "alpha") {
+    return dir === "asc" ? "公司名 A→Z" : "公司名 Z→A";
+  }
   return dir === "desc" ? "最新更新优先" : "最早更新优先";
 }
 
@@ -224,7 +231,9 @@ export function ApplicationsTracker() {
     }
     setSortField(field);
     // 切入字段时用该字段最常用方向
-    setSortDir(field === "deadline" ? "asc" : "desc");
+    setSortDir(
+      field === "deadline" || field === "alpha" ? "asc" : "desc"
+    );
   }
 
   function openInResume(id: string, regenerate = false) {
@@ -498,7 +507,7 @@ export function ApplicationsTracker() {
       )}
 
       {/* ——— Metrics Cards ——— */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <button
           type="button"
           onClick={() => setStatusFilter("all")}
@@ -632,7 +641,28 @@ export function ApplicationsTracker() {
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80">
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  公司名称
+                  <button
+                    type="button"
+                    onClick={() => toggleSort("alpha")}
+                    className={`inline-flex items-center gap-1 transition hover:text-slate-800 ${
+                      sortField === "alpha" ? "text-slate-900" : ""
+                    }`}
+                    title={sortDirHint(
+                      "alpha",
+                      sortField === "alpha" ? sortDir : "asc"
+                    )}
+                  >
+                    公司名称
+                    {sortField === "alpha" ? (
+                      sortDir === "asc" ? (
+                        <ArrowUpAZ className="h-3 w-3" />
+                      ) : (
+                        <ArrowDownAZ className="h-3 w-3" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-40" />
+                    )}
+                  </button>
                 </th>
                 <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                   岗位

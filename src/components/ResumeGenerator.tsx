@@ -45,6 +45,10 @@ import {
 } from "@/lib/cv-template";
 import { normalizeCoverLetterText } from "@/lib/cover-letter";
 import {
+  COVER_WORD_OPTIONS,
+  type CoverWordTarget,
+} from "@/lib/cover-letter-experience";
+import {
   exportHtmlPdf,
   exportHtmlWord,
   wrapCoverLetterAsDoc,
@@ -112,6 +116,8 @@ export function ResumeGenerator() {
   const [coverRevisionNotes, setCoverRevisionNotes] = useState("");
   const [coverRefineStatus, setCoverRefineStatus] = useState("");
   const [coverRevisionRound, setCoverRevisionRound] = useState(0);
+  const [coverWordTarget, setCoverWordTarget] =
+    useState<CoverWordTarget>(200);
   const [coverEpoch, setCoverEpoch] = useState(0);
   const [coverAlignments, setCoverAlignments] = useState<
     {
@@ -876,6 +882,7 @@ export function ResumeGenerator() {
           resume: resolveResumeSource(),
           company: draftCompany || resolved.company || "the company",
           jobTitle: draftTitle || resolved.title || "the role",
+          targetWords: coverWordTarget,
           revisionRound: 1,
         }),
       });
@@ -925,6 +932,7 @@ export function ResumeGenerator() {
           jobTitle: draftTitle || resolved.title || "the role",
           currentCoverLetter: normalizeCoverLetterText(coverLetter),
           revisionNotes: coverRevisionNotes.trim(),
+          targetWords: coverWordTarget,
           revisionRound: nextRound,
         }),
       });
@@ -1421,6 +1429,31 @@ export function ResumeGenerator() {
           </div>
 
           <div className="grid gap-2">
+            <div className="rounded-2xl border border-slate-200/70 bg-white/70 px-3 py-2.5">
+              <p className="mb-1.5 text-[11px] font-medium text-slate-600">
+                Cover Letter 目标字数
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {COVER_WORD_OPTIONS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setCoverWordTarget(n)}
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                      coverWordTarget === n
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {n} 词
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400">
+                生成与精简均按所选长度控制；履历中的实习/工作雇主（含 Neuralis
+                Consulting）不会被无故省略。
+              </p>
+            </div>
             <button
               type="button"
               onClick={genCover}
@@ -1432,7 +1465,7 @@ export function ResumeGenerator() {
               ) : (
                 <Mail className="h-4 w-4" />
               )}
-              生成 Cover Letter
+              生成 Cover Letter（约 {coverWordTarget} 词）
             </button>
             <button
               type="button"

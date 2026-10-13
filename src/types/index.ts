@@ -1,9 +1,20 @@
-/** 求职进度 · 网申状态（已移除「网申中」，与准备中合并） */
-export type TrackStatus = "preparing" | "applied" | "interview";
+/**
+ * 求职进度状态流转：
+ * 准备中 → 网申完成 → 收到网测 → 完成网测 → 收到面试
+ * （旧「网申中」已并入「准备中」）
+ */
+export type TrackStatus =
+  | "preparing"
+  | "applied"
+  | "testReceived"
+  | "testCompleted"
+  | "interview";
 
 export const TRACK_LABEL: Record<TrackStatus, string> = {
   preparing: "准备中",
   applied: "网申完成",
+  testReceived: "收到网测",
+  testCompleted: "完成网测",
   interview: "收到面试",
 };
 

@@ -100,7 +100,14 @@ export function normalizeWorkspaceSnapshot(raw: unknown): WorkspaceSnapshot {
         // 旧「网申中」(applying) → 「准备中」(preparing)
         trackStatus: (() => {
           const raw = String(a.trackStatus || "");
-          if (raw === "applied" || raw === "interview") return raw;
+          if (
+            raw === "applied" ||
+            raw === "testReceived" ||
+            raw === "testCompleted" ||
+            raw === "interview"
+          ) {
+            return raw;
+          }
           // applying / preparing / unknown → preparing
           return "preparing";
         })(),

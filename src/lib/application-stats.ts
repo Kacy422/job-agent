@@ -5,10 +5,12 @@ import {
 } from "@/types";
 import { normalizeDeadline } from "@/lib/deadline";
 
-/** 求职进度可选状态（已移除「网申中」） */
+/** 求职进度可选状态（顺序即看板流转） */
 export const TRACK_STATUSES: TrackStatus[] = [
   "preparing",
   "applied",
+  "testReceived",
+  "testCompleted",
   "interview",
 ];
 
@@ -24,13 +26,14 @@ export const STATUS_FILTER_OPTIONS: { id: StatusFilter; label: string }[] = [
   })),
 ];
 
-/** 排序字段：截止日期 | 更新时间 */
-export type SortField = "deadline" | "updated";
+/** 排序字段：截止日期 | 更新时间 | 公司首字母 */
+export type SortField = "deadline" | "updated" | "alpha";
 export type SortDir = "asc" | "desc";
 
 export const SORT_FIELD_OPTIONS: { id: SortField; label: string }[] = [
   { id: "deadline", label: "截止日期" },
   { id: "updated", label: "更新时间" },
+  { id: "alpha", label: "首字母" },
 ];
 
 /**
@@ -44,6 +47,8 @@ export function normalizeTrackStatus(
   if (
     status === "preparing" ||
     status === "applied" ||
+    status === "testReceived" ||
+    status === "testCompleted" ||
     status === "interview"
   ) {
     return status;
@@ -59,6 +64,8 @@ export function computeApplicationStats(apps: JobApplication[]): {
   const counts: StatusCounts = {
     preparing: 0,
     applied: 0,
+    testReceived: 0,
+    testCompleted: 0,
     interview: 0,
   };
   for (const app of apps) {
@@ -90,10 +97,18 @@ function updatedSortKey(app: JobApplication): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
+function alphaSortKey(app: JobApplication): string {
+  return String(app.company || app.title || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^[^a-z0-9\u4e00-\u9fff]+/, "");
+}
+
 /**
- * 排序：deadline 无日期的记录始终沉底；同值时用更新时间作次级排序。
- * - deadline asc = 最近截止（含已过期）在前
- * - updated desc = 最新更新在前
+ * 排序：
+ * - deadline：无日期沉底；asc = 最近截止优先
+ * - updated：desc = 最新更新优先
+ * - alpha：公司名首字母 A→Z / Z→A
  */
 export function sortApplications(
   apps: JobApplication[],
@@ -111,6 +126,24 @@ export function sortApplications(
       if (ka == null) return 1;
       if (kb == null) return -1;
       if (ka !== kb) return (ka - kb) * mul;
+      return updatedSortKey(b) - updatedSortKey(a);
+    }
+
+    if (field === "alpha") {
+      const ka = alphaSortKey(a);
+      const kb = alphaSortKey(b);
+      if (ka !== kb) {
+        return ka.localeCompare(kb, "en", { sensitivity: "base" }) * mul;
+      }
+      const ta = String(a.title || "")
+        .trim()
+        .toLowerCase();
+      const tb = String(b.title || "")
+        .trim()
+        .toLowerCase();
+      if (ta !== tb) {
+        return ta.localeCompare(tb, "en", { sensitivity: "base" }) * mul;
+      }
       return updatedSortKey(b) - updatedSortKey(a);
     }
 
