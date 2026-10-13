@@ -214,7 +214,7 @@ export function ApplicationsTracker() {
     kind: PreviewKind;
   } | null>(null);
 
-  const { total, counts } = useMemo(
+  const { total, counts, funnelCounts } = useMemo(
     () => computeApplicationStats(applications),
     [applications]
   );
@@ -542,7 +542,7 @@ export function ApplicationsTracker() {
               {TRACK_LABEL[s]}
             </p>
             <p className="mt-1 font-display text-2xl tabular-nums text-slate-900">
-              {counts[s]}
+              {funnelCounts[s]}
             </p>
           </button>
         ))}
@@ -557,6 +557,7 @@ export function ApplicationsTracker() {
           </span>
           {STATUS_FILTER_OPTIONS.map((opt) => {
             const active = statusFilter === opt.id;
+            // 筛选标签用精确计数，与下方表格行数一致
             const count =
               opt.id === "all" ? total : counts[opt.id as TrackStatus];
             return (

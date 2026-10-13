@@ -56,10 +56,20 @@ export function normalizeTrackStatus(
   return "preparing";
 }
 
-/** 统计各状态数量 + 总数 */
+/**
+ * 统计：
+ * - counts：各状态精确互斥数量（供筛选标签 / 表格过滤）
+ * - funnelCounts：漏斗累加数量（供顶部统计卡片）
+ *   准备中 = 仅 preparing
+ *   网申完成 = applied + testReceived + testCompleted + interview
+ *   收到网测 = testReceived + testCompleted + interview
+ *   完成网测 = testCompleted + interview
+ *   收到面试 = interview
+ */
 export function computeApplicationStats(apps: JobApplication[]): {
   total: number;
   counts: StatusCounts;
+  funnelCounts: StatusCounts;
 } {
   const counts: StatusCounts = {
     preparing: 0,
@@ -71,7 +81,21 @@ export function computeApplicationStats(apps: JobApplication[]): {
   for (const app of apps) {
     counts[normalizeTrackStatus(app.trackStatus)] += 1;
   }
-  return { total: apps.length, counts };
+
+  const funnelCounts: StatusCounts = {
+    preparing: counts.preparing,
+    applied:
+      counts.applied +
+      counts.testReceived +
+      counts.testCompleted +
+      counts.interview,
+    testReceived:
+      counts.testReceived + counts.testCompleted + counts.interview,
+    testCompleted: counts.testCompleted + counts.interview,
+    interview: counts.interview,
+  };
+
+  return { total: apps.length, counts, funnelCounts };
 }
 
 /** 按状态筛选列表（all = 不过滤） */
